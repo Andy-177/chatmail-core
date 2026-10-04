@@ -260,6 +260,12 @@ pub enum SystemMessage {
 
     /// Message unpinned. The unpinned message is referred in `In-Reply-To:` header.
     MessageUnpinned = 72,
+
+    /// Permission groups of a chatroom were changed.
+    ///
+    /// The JSON payload is passed in the `Chatroom-Permissions:` header.
+    /// This message is hidden, see [`crate::chatroom`].
+    ChatroomPermissions = 80,
 }
 
 impl MimeMessage {
@@ -735,6 +741,8 @@ impl MimeMessage {
                 self.is_system_message = SystemMessage::MessagePinned;
             } else if value == "message-unpinned" {
                 self.is_system_message = SystemMessage::MessageUnpinned;
+            } else if value == "chatroom-permissions" {
+                self.is_system_message = SystemMessage::ChatroomPermissions;
             }
         } else if self.get_header(HeaderDef::ChatGroupMemberRemoved).is_some() {
             self.is_system_message = SystemMessage::MemberRemovedFromGroup;

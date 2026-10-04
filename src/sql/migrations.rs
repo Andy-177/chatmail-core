@@ -2672,6 +2672,31 @@ CREATE TABLE smtp2 (
             .await?;
     }
 
+    inc_and_check(&mut migration_version, 168)?;
+    if dbversion < migration_version {
+        // Permission groups of chatrooms.
+        // Every chatroom has the two built-in groups
+        // `1` ("Owner") and `2` ("Everyone") which cannot be deleted.
+        sql.execute_migration(
+            "CREATE TABLE chatroom_permission_groups (
+                chat_id INTEGER NOT NULL,
+                id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                -- Comma-separated list of ChatPermission names, empty if there are none.
+                permissions TEXT NOT NULL,
+                UNIQUE(chat_id, id)
+            ) STRICT;
+CREATE TABLE chatroom_permission_group_members (
+                chat_id INTEGER NOT NULL,
+                group_id INTEGER NOT NULL,
+                contact_id INTEGER NOT NULL,
+                UNIQUE(chat_id, group_id, contact_id)
+            ) STRICT;",
+            migration_version,
+        )
+        .await?;
+    }
+
     let new_version = sql
         .get_raw_config_int(VERSION_CFG)
         .await?

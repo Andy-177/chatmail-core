@@ -628,6 +628,28 @@ CREATE TABLE broadcast_secrets(
     secret TEXT NOT NULL
 ) STRICT;
 
+-- Permission groups of chatrooms,
+-- i.e. group chats with a permission group system.
+-- See `chatroom.rs`.
+-- Every chatroom has the two built-in groups
+-- `1` ("Owner") and `2` ("Everyone") which cannot be deleted.
+CREATE TABLE chatroom_permission_groups (
+    chat_id INTEGER NOT NULL,
+    id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    -- Comma-separated list of ChatPermission names, empty if there are none.
+    permissions TEXT NOT NULL,
+    UNIQUE(chat_id, id)
+) STRICT;
+
+-- Contacts that are members of a chatroom permission group.
+CREATE TABLE chatroom_permission_group_members (
+    chat_id INTEGER NOT NULL,
+    group_id INTEGER NOT NULL,
+    contact_id INTEGER NOT NULL,
+    UNIQUE(chat_id, group_id, contact_id)
+) STRICT;
+
 
 -- Candidate chatmail relays for automatic relay management.
 -- Holds the hosts a QR code contributed and the default relays already tried;

@@ -159,6 +159,11 @@ pub enum HeaderDef {
     /// Advertised gossip topic for one webxdc.
     IrohGossipTopic,
 
+    /// JSON with the permission groups of a chatroom.
+    ///
+    /// See [`crate::chatroom`].
+    ChatroomPermissions,
+
     /// See <https://www.rfc-editor.org/rfc/rfc9788.html#name-hp-outer-header-field>.
     HpOuter,
 

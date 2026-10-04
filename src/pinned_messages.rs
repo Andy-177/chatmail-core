@@ -11,6 +11,7 @@
 use anyhow::{Result, ensure};
 
 use crate::chat::{ChatId, send_msg};
+use crate::chatroom::ChatPermission;
 use crate::contact::ContactId;
 use crate::context::Context;
 use crate::events::EventType;
@@ -45,6 +46,13 @@ pub async fn set_pinned_state(
     if msg.is_pinned() == new_pinned_state {
         return Ok(());
     }
+    msg.chat_id
+        .check_permission(
+            context,
+            ContactId::SELF,
+            ChatPermission::SetPinnedMessageState,
+        )
+        .await?;
 
     let mut info_msg = Message::new(Viewtype::Text);
     info_msg.text = if new_pinned_state {

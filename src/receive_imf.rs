@@ -17,6 +17,7 @@ use regex::{Regex, regex};
 use crate::chat::{
     self, Chat, ChatId, ChatIdBlocked, ChatVisibility, is_contact_in_chat, save_broadcast_secret,
 };
+use crate::chatroom;
 use crate::config::Config;
 use crate::constants::{Blocked, Chattype, EDITED_PREFIX};
 use crate::contact::{self, Contact, ContactId, Origin};
@@ -3090,6 +3091,27 @@ async fn apply_group_changes(
         &mut better_msg,
     )
     .await?;
+
+    if mime_parser.is_system_message == SystemMessage::ChatroomPermissions {
+        // The permissions are not shown to users, so the message is trashed.
+        better_msg = Some(String::new());
+        silent = true;
+        if let Some(json) = mime_parser.get_header(HeaderDef::ChatroomPermissions) {
+            if is_from_in_chat {
+                if let Err(err) =
+                    chatroom::apply_permissions_from_wire(context, chat.id, from_id, json).await
+                {
+                    warn!(context, "Failed to apply chatroom permissions: {err:#}");
+                }
+            } else {
+                warn!(
+                    context,
+                    "Ignoring chatroom permissions from {from_id} who is not a member of {}.\n{json}",
+                    chat.id
+                );
+            }
+        }
+    }
 
     if is_from_in_chat {
         // Avoid insertion of `from_id` into a group with inappropriate encryption state.

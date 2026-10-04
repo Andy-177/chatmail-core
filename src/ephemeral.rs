@@ -73,6 +73,7 @@ use serde::{Deserialize, Serialize};
 use tokio::time::timeout;
 
 use crate::chat::{ChatId, ChatIdBlocked, send_msg};
+use crate::chatroom::ChatPermission;
 use crate::config::Config;
 use crate::contact::ContactId;
 use crate::context::Context;
@@ -199,6 +200,12 @@ impl ChatId {
     ///
     /// If timer value is 0, disable ephemeral message timer.
     pub async fn set_ephemeral_timer(self, context: &Context, timer: Timer) -> Result<()> {
+        self.check_permission(
+            context,
+            ContactId::SELF,
+            ChatPermission::SetChatEphemeralTimer,
+        )
+        .await?;
         if timer == self.get_ephemeral_timer(context).await? {
             return Ok(());
         }

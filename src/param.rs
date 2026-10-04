@@ -189,6 +189,19 @@ pub enum Param {
     /// messages to all members.
     Unpromoted = b'U',
 
+    /// For Chatrooms: Set if the group chat is a chatroom,
+    /// i.e. a group chat with a permission group system.
+    ///
+    /// See [`crate::chatroom`].
+    Chatroom = b'#',
+
+    /// For Chatrooms: The contact id of the contact who created the chatroom.
+    ///
+    /// The creator can never be deprived
+    /// of [`ChatPermission::ManagePermissionGroup`](crate::chatroom::ChatPermission::ManagePermissionGroup)
+    /// and [`ChatPermission::AssignPermissionGroup`](crate::chatroom::ChatPermission::AssignPermissionGroup).
+    ChatroomCreator = b'$',
+
     /// For Groups and Contacts
     ProfileImage = b'i',
 

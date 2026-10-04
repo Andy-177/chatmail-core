@@ -18,6 +18,7 @@ use strum_macros::EnumIter;
 use crate::blob::BlobObject;
 use crate::chatlist::Chatlist;
 use crate::chatlist_events;
+use crate::chatroom::{self, ChatPermission};
 use crate::color::str_to_color;
 use crate::config::Config;
 use crate::constants::{
@@ -687,6 +688,14 @@ SELECT id, rfc724_mid, pre_rfc724_mid, timestamp, ?, 1 FROM msgs WHERE chat_id=?
                     (ChatId::TRASH, self),
                 )?;
                 transaction.execute("DELETE FROM chats_contacts WHERE chat_id=?", (self,))?;
+                transaction.execute(
+                    "DELETE FROM chatroom_permission_group_members WHERE chat_id=?",
+                    (self,),
+                )?;
+                transaction.execute(
+                    "DELETE FROM chatroom_permission_groups WHERE chat_id=?",
+                    (self,),
+                )?;
                 transaction.execute("DELETE FROM chats WHERE id=?", (self,))?;
                 Ok(())
             })
@@ -2082,7 +2091,7 @@ impl Chat {
     }
 
     /// Returns chat id for the purpose of synchronisation across devices.
-    async fn get_sync_id(&self, context: &Context) -> Result<Option<SyncId>> {
+    pub(crate) async fn get_sync_id(&self, context: &Context) -> Result<Option<SyncId>> {
         match self.typ {
             Chattype::Single => {
                 if self.is_device_talk() {
@@ -3886,6 +3895,11 @@ pub(crate) async fn add_contact_to_chat_ext(
         );
         return Ok(false);
     }
+    if chat.is_chatroom() {
+        chat_id
+            .check_permission(context, ContactId::SELF, ChatPermission::AddContactToChat)
+            .await?;
+    }
     if from_handshake && chat.param.get_int(Param::Unpromoted).unwrap_or_default() == 1 {
         let now = time();
         chat.param
@@ -3939,6 +3953,10 @@ pub(crate) async fn add_contact_to_chat_ext(
         send_msg(context, chat_id, &mut msg).await?;
 
         sync = Nosync;
+    }
+    if chat.is_chatroom() {
+        // Make sure the new member gets to know the current permissions.
+        chatroom::broadcast_permissions(context, chat_id, sync::Sync::Sync).await?;
     }
     context.emit_event(EventType::ChatModified(chat_id));
     if sync.into() {
@@ -4142,6 +4160,17 @@ pub async fn remove_contact_from_chat(
         "Cannot remove members from non-group chats."
     );
 
+    // Leaving a chatroom is always allowed, removing other members is not.
+    if chat.is_chatroom() && contact_id != ContactId::SELF {
+        chat_id
+            .check_permission(
+                context,
+                ContactId::SELF,
+                ChatPermission::RemoveContactFromChat,
+            )
+            .await?;
+    }
+
     if !chat.is_self_in_chat(context).await? {
         let err_msg =
             format!("Cannot remove contact {contact_id} from chat {chat_id}: self not in group.");
@@ -4183,6 +4212,9 @@ pub async fn remove_contact_from_chat(
         } else {
             sync = Sync;
         }
+    }
+    if chat.is_chatroom() && contact_id != ContactId::SELF {
+        chatroom::forget_contact(context, chat_id, contact_id).await?;
     }
     context.emit_event(EventType::ChatModified(chat_id));
     if sync.into() {
@@ -4257,6 +4289,11 @@ async fn set_chat_description_ext(
             "Cannot set chat description; self not in group".into(),
         ));
         bail!("Cannot set chat description; self not in group");
+    }
+    if chat.is_chatroom() {
+        chat_id
+            .check_permission(context, ContactId::SELF, ChatPermission::SetChatDescription)
+            .await?;
     }
 
     let old_description = get_chat_description(context, chat_id).await?;
@@ -4347,6 +4384,11 @@ async fn rename_ext(
                 "Cannot set chat name; self not in group".into(),
             ));
         } else {
+            if chat.is_chatroom() {
+                chat_id
+                    .check_permission(context, ContactId::SELF, ChatPermission::SetChatName)
+                    .await?;
+            }
             context
                 .sql
                 .execute(
@@ -4417,6 +4459,15 @@ pub async fn set_chat_profile_image(
             "Cannot set chat profile image; self not in group.".into(),
         ));
         bail!("Failed to set profile image");
+    }
+    if chat.is_chatroom() {
+        chat_id
+            .check_permission(
+                context,
+                ContactId::SELF,
+                ChatPermission::SetChatProfileImage,
+            )
+            .await?;
     }
     let mut msg = Message::new(Viewtype::Text);
     msg.param
@@ -5176,6 +5227,9 @@ pub(crate) enum SyncAction {
     /// The list is a list of pairs of fingerprint and address.
     SetPgpContacts(Vec<(String, String)>),
     SetDescription(String),
+
+    /// Set the JSON-serialized permission groups of a chatroom.
+    SetChatroomPermissions(String),
     Delete,
 }
 
@@ -5288,6 +5342,9 @@ impl Context {
             SyncAction::SetContacts(addrs) => set_contacts_by_addrs(self, chat_id, addrs).await,
             SyncAction::SetPgpContacts(fingerprint_addrs) => {
                 set_contacts_by_fingerprints(self, chat_id, fingerprint_addrs).await
+            }
+            SyncAction::SetChatroomPermissions(json) => {
+                chatroom::apply_permissions(self, chat_id, json).await
             }
             SyncAction::Delete => chat_id.delete_ext(self, Nosync).await,
         }

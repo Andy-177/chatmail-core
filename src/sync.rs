@@ -22,7 +22,7 @@ use crate::{message, stock_str, token};
 use std::collections::BTreeSet;
 
 /// Whether to send device sync messages. Aimed for usage in the internal API.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub(crate) enum Sync {
     Nosync,
     Sync,

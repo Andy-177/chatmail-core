@@ -118,6 +118,7 @@ pub mod receive_imf;
 pub mod tools;
 
 pub mod accounts;
+pub mod chatroom;
 pub mod peer_channels;
 pub mod reaction;
 

@@ -1602,6 +1602,7 @@ impl MimeFactory {
                 SystemMessage::CallEnded => {}
                 SystemMessage::MessagePinned => {}
                 SystemMessage::MessageUnpinned => {}
+                SystemMessage::ChatroomPermissions => {}
             }
 
             if command == SystemMessage::GroupDescriptionChanged
@@ -1737,6 +1738,22 @@ impl MimeFactory {
                 headers.push((
                     "Chat-Content",
                     mail_builder::headers::raw::Raw::new("message-unpinned").into(),
+                ));
+            }
+            SystemMessage::ChatroomPermissions => {
+                let json = msg.param.get(Param::Arg).unwrap_or_default();
+                headers.push((
+                    HeaderDef::ChatroomPermissions.into(),
+                    mail_builder::headers::text::Text::new(json.to_string()).into(),
+                ));
+                headers.push((
+                    "Chat-Content",
+                    mail_builder::headers::raw::Raw::new("chatroom-permissions").into(),
+                ));
+                // This message is not meant to be replied to.
+                headers.push((
+                    "Auto-Submitted",
+                    mail_builder::headers::raw::Raw::new("auto-generated").into(),
                 ));
             }
             _ => {}
