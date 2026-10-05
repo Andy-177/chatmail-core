@@ -321,7 +321,7 @@ impl ChatId {
             .await?;
         insert_group(context, *self, id, &name, permissions).await?;
 
-        broadcast_permissions(context, *self, sync::Sync).await??;
+        broadcast_permissions(context, *self, sync::Sync).await?;
         Ok(id)
     }
 
