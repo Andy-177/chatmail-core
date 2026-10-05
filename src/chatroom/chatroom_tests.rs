@@ -354,7 +354,6 @@ async fn test_chatroom_permissions_are_sent_to_members() -> Result<()> {
             .await?
             .is_empty()
     );
-    forward_all(&alice, &[&bob]).await;
 
     Ok(())
 }
