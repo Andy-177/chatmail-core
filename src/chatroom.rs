@@ -57,11 +57,11 @@ use crate::chatlist_events;
 use crate::contact::{Contact, ContactId, Origin};
 use crate::context::Context;
 use crate::events::EventType;
-use crate::log::{LogExt as _, info, warn};
+use crate::log::{LogExt as _, warn};
 use crate::message::Message;
 use crate::mimeparser::SystemMessage;
 use crate::param::Param;
-use crate::sync::Sync;
+use crate::sync::{self, Sync};
 
 /// ID of the built-in "Owner" permission group.
 const OWNER_GROUP: u32 = 1;
@@ -229,7 +229,7 @@ pub async fn create_chatroom(context: &Context, name: &str) -> Result<ChatId> {
     insert_group(context, chat_id, EVERYONE_GROUP, "Everyone", &[]).await?;
     insert_group_member(context, chat_id, OWNER_GROUP, ContactId::SELF).await?;
 
-    broadcast_permissions(context, chat_id, Sync).await?;
+    broadcast_permissions(context, chat_id, sync::Sync).await?;
     Ok(chat_id)
 }
 
@@ -316,12 +316,12 @@ impl ChatId {
             .query_row(
                 "SELECT IFNULL(MAX(id), 0)+1 FROM chatroom_permission_groups WHERE chat_id=?",
                 (*self,),
-                |row| row.get(0),
+                |row| Ok(row.get(0)?),
             )
             .await?;
         insert_group(context, *self, id, &name, permissions).await?;
 
-        broadcast_permissions(context, *self, Sync).await?;
+        broadcast_permissions(context, *self, sync::Sync).await??;
         Ok(id)
     }
 
@@ -356,7 +356,7 @@ impl ChatId {
             .await?;
         ensure!(changed > 0, "Unknown permission group {group_id}");
 
-        broadcast_permissions(context, *self, Sync).await
+        broadcast_permissions(context, *self, sync::Sync).await?
     }
 
     /// Deletes a permission group of the chatroom.
@@ -392,7 +392,7 @@ impl ChatId {
             )
             .await?;
 
-        broadcast_permissions(context, *self, Sync).await
+        broadcast_permissions(context, *self, sync::Sync).await?
     }
 
     /// Returns the contacts which are members
@@ -445,7 +445,7 @@ impl ChatId {
         );
 
         insert_group_member(context, *self, group_id, contact_id).await?;
-        broadcast_permissions(context, *self, Sync).await
+        broadcast_permissions(context, *self, sync::Sync).await?
     }
 
     /// Removes a contact from a permission group of the chatroom.
@@ -474,7 +474,7 @@ impl ChatId {
             )
             .await?;
 
-        broadcast_permissions(context, *self, Sync).await
+        broadcast_permissions(context, *self, sync::Sync).await?
     }
 
     /// Returns all permissions the contact has in the chatroom,
@@ -564,7 +564,7 @@ impl ChatId {
                  WHERE chat_id=? AND contact_id=? AND group_id<>?
                  ORDER BY group_id",
                 (*self, contact_id, EVERYONE_GROUP),
-                |row| row.get(0),
+                |row| Ok(row.get(0)?),
             )
             .await?;
         Ok(if ids.is_empty() {
@@ -590,7 +590,7 @@ impl ChatId {
 /// i.e. permission groups are only available in chatrooms.
 async fn ensure_chatroom(context: &Context, chat_id: ChatId) -> Result<()> {
     ensure!(
-        chat_id.is_chatroom(context).await?,
+        Chat::load_from_db(context, chat_id).await?.is_chatroom(),
         "Permission groups are only available in chatrooms"
     );
     Ok(())
@@ -604,7 +604,7 @@ async fn ensure_chatroom(context: &Context, chat_id: ChatId) -> Result<()> {
 pub(crate) async fn broadcast_permissions(
     context: &Context,
     chat_id: ChatId,
-    sync: Sync,
+    sync: sync::Sync,
 ) -> Result<()> {
     let chat = Chat::load_from_db(context, chat_id).await?;
     if !chat.is_chatroom() {
@@ -613,7 +613,7 @@ pub(crate) async fn broadcast_permissions(
     let json = serialize(context, chat_id).await?;
 
     if sync.into()
-        && let Some(sync_id) = chat.get_sync_id(context).await?
+        && let Some(_sync_id) = chat.get_sync_id(context).await?
     {
         chat.sync(context, SyncAction::SetChatroomPermissions(json.clone()))
             .await
@@ -758,7 +758,7 @@ pub(crate) async fn forget_contact(
             (chat_id, contact_id),
         )
         .await?;
-    broadcast_permissions(context, chat_id, Sync).await
+    broadcast_permissions(context, chat_id, Sync::Sync).await
 }
 
 /// Serializes the permission groups of the chatroom to JSON.

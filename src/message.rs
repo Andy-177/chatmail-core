@@ -1052,8 +1052,9 @@ impl Message {
             | SystemMessage::IrohNodeAddr
             | SystemMessage::CallAccepted
             | SystemMessage::CallEnded
-            | SystemMessage::MessagePinned // UI should scroll to pinned message on tapping
-            | SystemMessage::MessageUnpinned // UI should scroll to unpinned message on tapping
+            | SystemMessage::MessagePinned
+            | SystemMessage::MessageUnpinned
+            | SystemMessage::ChatroomPermissions
             | SystemMessage::Unknown => Ok(None),
         }
     }
