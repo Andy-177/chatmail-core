@@ -583,7 +583,7 @@ impl ChatId {
         context
             .sql
             .exists(
-                "SELECT 1 FROM chatroom_permission_groups WHERE chat_id=? AND id=?",
+                "SELECT COUNT(*) FROM chatroom_permission_groups WHERE chat_id=? AND id=?",
                 (*self, group_id),
             )
             .await
@@ -640,7 +640,7 @@ async fn has_other_members(context: &Context, chat_id: ChatId) -> Result<bool> {
     context
         .sql
         .exists(
-            "SELECT 1 FROM chats_contacts WHERE chat_id=? AND contact_id<>?",
+            "SELECT COUNT(*) FROM chats_contacts WHERE chat_id=? AND contact_id<>?",
             (chat_id, ContactId::SELF),
         )
         .await
