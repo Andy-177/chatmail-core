@@ -608,7 +608,7 @@ async fn ensure_chatroom(context: &Context, chat_id: ChatId) -> Result<()> {
 pub(crate) async fn broadcast_permissions(
     context: &Context,
     chat_id: ChatId,
-    sync: sync::Sync::Sync,
+    sync: sync::Sync,
 ) -> Result<()> {
     let chat = Chat::load_from_db(context, chat_id).await?;
     if !chat.is_chatroom() {
