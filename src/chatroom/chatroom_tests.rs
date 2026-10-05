@@ -4,16 +4,18 @@ use anyhow::Result;
 
 use crate::chat::{self, Chat};
 use crate::chatroom::{ALL_PERMISSIONS, ChatPermission, create_chatroom};
-use crate::contact::ContactId;
+use crate::contact::{Contact, ContactId};
 use crate::message::Message;
 use crate::mimeparser::SystemMessage;
 use crate::param::Param;
 use crate::test_utils::{TestContext, TestContextManager};
 
 /// Forwards all messages which `from` has sent to `to`.
-async fn forward_all(from: &TestContext, to: &TestContext) {
+async fn forward_all(from: &TestContext, to: &[&TestContext]) {
     while let Some(sent) = from.pop_sent_msg_opt().await {
-        let _received = to.recv_msg_opt(&sent).await;
+        for ctx in to {
+            let _received = ctx.recv_msg_opt(&sent).await;
+        }
     }
 }
 
@@ -82,7 +84,7 @@ async fn test_chatroom_permissions() -> Result<()> {
     let chat_id = create_chatroom(&alice, "Chatroom").await?;
     chat::add_contact_to_chat(&alice, chat_id, bob_id).await?;
     // Bob is told about the permissions as soon as he is added.
-    forward_all(&alice, &bob).await;
+    forward_all(&alice, &[&bob]).await;
     let sent = alice.send_text(chat_id, "hi").await;
     let bob_chat_id = bob.recv_msg(&sent).await.get_chat_id();
     bob_chat_id.accept(&bob).await?;
@@ -126,7 +128,7 @@ async fn test_chatroom_permissions() -> Result<()> {
     chat_id
         .assign_permission_group(&alice, group_id, bob_id)
         .await?;
-    forward_all(&alice, &bob).await;
+    forward_all(&alice, &[&bob]).await;
     assert_eq!(
         chat_id
             .get_permission_group_members(&alice, group_id)
@@ -154,7 +156,7 @@ async fn test_chatroom_permissions() -> Result<()> {
     chat_id
         .revoke_permission_group(&alice, group_id, bob_id)
         .await?;
-    forward_all(&alice, &bob).await;
+    forward_all(&alice, &[&bob]).await;
     assert!(
         chat_id
             .get_contact_permissions(&alice, bob_id)
@@ -183,9 +185,16 @@ async fn test_chatroom_permissions() -> Result<()> {
     );
 
     tcm.section("Members of other groups do not get the permissions of 'Everyone'");
+    let silent_group_id = chat_id.create_permission_group(&alice, "Silent", &[]).await?;
     chat_id
-        .assign_permission_group(&alice, group_id, bob_id)
+        .assign_permission_group(&alice, silent_group_id, bob_id)
         .await?;
+    assert!(
+        chat_id
+            .get_contact_permissions(&alice, bob_id)
+            .await?
+            .is_empty()
+    );
     assert!(
         !chat_id
             .has_permission(&alice, bob_id, ChatPermission::SetChatName)
@@ -194,6 +203,12 @@ async fn test_chatroom_permissions() -> Result<()> {
 
     tcm.section("Leaving a chatroom is always possible");
     chat::remove_contact_from_chat(&bob, bob_chat_id, ContactId::SELF).await?;
+    assert!(
+        bob_chat_id
+            .get_permission_group_members(&bob, silent_group_id)
+            .await?
+            .is_empty()
+    );
 
     Ok(())
 }
@@ -267,12 +282,11 @@ async fn test_chatroom_permissions_are_sent_to_members() -> Result<()> {
     let alice = tcm.alice().await;
     let bob = tcm.bob().await;
     let alice_bob_id = alice.add_or_lookup_contact_id(&bob).await;
-    let bob_alice_id = bob.add_or_lookup_contact_id(&alice).await;
 
     tcm.section("Alice creates a chatroom, adds Bob and sends a message");
     let chat_id = create_chatroom(&alice, "Chatroom").await?;
     chat::add_contact_to_chat(&alice, chat_id, alice_bob_id).await?;
-    forward_all(&alice, &bob).await;
+    forward_all(&alice, &[&bob]).await;
     let sent = alice.send_text(chat_id, "hi").await;
     let bob_chat_id = bob.recv_msg(&sent).await.get_chat_id();
     bob_chat_id.accept(&bob).await?;
@@ -292,7 +306,7 @@ async fn test_chatroom_permissions_are_sent_to_members() -> Result<()> {
     chat_id
         .assign_permission_group(&alice, group_id, alice_bob_id)
         .await?;
-    forward_all(&alice, &bob).await;
+    forward_all(&alice, &[&bob]).await;
 
     let groups = bob_chat_id.get_permission_groups(&bob).await?;
     assert_eq!(groups.len(), 3, "{groups:?}");
@@ -309,12 +323,14 @@ async fn test_chatroom_permissions_are_sent_to_members() -> Result<()> {
             .await?,
         vec![ContactId::SELF]
     );
+    let creator = Chat::load_from_db(&bob, bob_chat_id)
+        .await?
+        .get_chatroom_creator(&bob)
+        .await?
+        .expect("Bob does not know the creator of the chatroom");
     assert_eq!(
-        Chat::load_from_db(&bob, bob_chat_id)
-            .await?
-            .get_chatroom_creator(&bob)
-            .await?,
-        Some(bob_alice_id)
+        Contact::get_by_id(&bob, creator).await?.get_addr(),
+        bob.get_primary_self_addr().await?
     );
     chat::set_chat_name(&bob, bob_chat_id, "Moderated chatroom").await?;
 
@@ -322,7 +338,7 @@ async fn test_chatroom_permissions_are_sent_to_members() -> Result<()> {
     chat_id
         .set_permission_group(&alice, group_id, "Moderators", &ALL_PERMISSIONS)
         .await?;
-    forward_all(&alice, &bob).await;
+    forward_all(&alice, &[&bob]).await;
     assert_eq!(
         bob_chat_id.get_permission_groups(&bob).await?[2].permissions,
         ALL_PERMISSIONS.to_vec()
@@ -330,13 +346,13 @@ async fn test_chatroom_permissions_are_sent_to_members() -> Result<()> {
 
     tcm.section("Permission group members are cleaned up when they leave");
     chat::remove_contact_from_chat(&alice, chat_id, alice_bob_id).await?;
-    forward_all(&alice, &bob).await;
     assert!(
-        bob_chat_id
-            .get_permission_group_members(&bob, group_id)
+        chat_id
+            .get_permission_group_members(&alice, group_id)
             .await?
             .is_empty()
     );
+    forward_all(&alice, &[&bob]).await;
 
     Ok(())
 }
@@ -359,8 +375,16 @@ async fn test_chatroom_permissions_from_members_are_not_applied() -> Result<()> 
     let charlie_chat_id = charlie.recv_msg(&sent).await.get_chat_id();
     bob_chat_id.accept(&bob).await?;
     charlie_chat_id.accept(&charlie).await?;
-    forward_all(&alice, &bob).await;
+    forward_all(&alice, &[&bob, &charlie]).await;
     assert_eq!(bob_chat_id.get_permission_groups(&bob).await?.len(), 2);
+    assert_eq!(
+        charlie_chat_id.get_permission_groups(&charlie).await?.len(),
+        2
+    );
+
+    tcm.section("Bob sends a message so that Charlie knows Bob's key");
+    let sent = bob.send_text(bob_chat_id, "Bob says hi").await;
+    let _received = charlie.recv_msg_opt(&sent).await;
 
     tcm.section("Charlie sends permissions which he may not manage");
     let mut msg = Message::new_text("Chatroom permissions updated.".to_string());
@@ -368,7 +392,7 @@ async fn test_chatroom_permissions_from_members_are_not_applied() -> Result<()> 
     msg.param.set_cmd(SystemMessage::ChatroomPermissions);
     msg.param.set(
         Param::Arg,
-        r#"{"creator":"","groups":[{"id":1,"name":"Charlie","permissions":"set_chat_name"}],"members":[]}"#,
+        r#"{"rev":99,"creator":"","groups":[{"id":1,"name":"Charlie","permissions":"set_chat_name"},{"id":2,"name":"Everyone","permissions":""}],"members":[]}"#,
     );
     let sent = charlie.send_msg(charlie_chat_id, &mut msg).await;
     let _received = bob.recv_msg_opt(&sent).await;

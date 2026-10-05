@@ -183,6 +183,14 @@ pub struct PermissionGroup {
 /// to other members and to our own devices.
 #[derive(Debug, Serialize, Deserialize)]
 struct PermissionsJson {
+    /// Revision of the permission groups.
+    ///
+    /// It is increased on every change
+    /// so that outdated messages can be detected
+    /// and messages may arrive out of order.
+    #[serde(default)]
+    rev: i64,
+
     /// Address of the contact which created the chatroom.
     creator: String,
 
@@ -533,9 +541,6 @@ impl ChatId {
     }
 
     /// Returns an error if the contact misses the given chatroom permission.
-    ///
-    /// The [`EventType::Error`] event is emitted in this case
-    /// so that the user interface can tell the user about the missing permission.
     pub(crate) async fn check_permission(
         &self,
         context: &Context,
@@ -546,10 +551,7 @@ impl ChatId {
         if !chat.is_chatroom() || self.has_permission(context, contact_id, permission).await? {
             return Ok(());
         }
-        let error =
-            format!("Missing chatroom permission {permission:?} for {contact_id} in {self}.");
-        context.emit_event(EventType::Error(error.clone()));
-        bail!(error)
+        bail!("Missing chatroom permission {permission:?} for {contact_id} in {self}.")
     }
 
     /// Returns the IDs of the permission groups the contact is a member of.
@@ -610,11 +612,17 @@ pub(crate) async fn broadcast_permissions(
     chat_id: ChatId,
     sync: sync::Sync,
 ) -> Result<()> {
-    let chat = Chat::load_from_db(context, chat_id).await?;
+    let mut chat = Chat::load_from_db(context, chat_id).await?;
     if !chat.is_chatroom() {
         return Ok(());
     }
-    let json = serialize(context, chat_id).await?;
+
+    // Increase the revision so that members can detect outdated permissions.
+    let rev = chat.param.get_int(Param::ChatroomPermissionsRev).unwrap_or_default() + 1;
+    chat.param.set_int(Param::ChatroomPermissionsRev, rev);
+    chat.update_param(context).await?;
+
+    let json = serialize(context, chat_id, rev).await?;
 
     if sync.into()
         && let Some(_sync_id) = chat.get_sync_id(context).await?
@@ -656,6 +664,18 @@ pub(crate) async fn apply_permissions(
     json: &str,
 ) -> Result<()> {
     let data: PermissionsJson = serde_json::from_str(json)?;
+
+    let mut chat = Chat::load_from_db(context, chat_id).await?;
+    let rev = chat.param.get_int(Param::ChatroomPermissionsRev).unwrap_or_default();
+    if data.rev < rev {
+        info!(
+            context,
+            "Ignoring outdated chatroom permissions of {chat_id}: rev {} < {rev}.",
+            data.rev
+        );
+        return Ok(());
+    }
+
     ensure!(
         data.groups.iter().any(|group| group.id == OWNER_GROUP)
             && data.groups.iter().any(|group| group.id == EVERYONE_GROUP),
@@ -676,7 +696,6 @@ pub(crate) async fn apply_permissions(
     // The creator of the chatroom cannot be changed by a permissions message,
     // otherwise a member which may manage the permission groups
     // could take over the chatroom.
-    let mut chat = Chat::load_from_db(context, chat_id).await?;
     let creator = match chat.get_chatroom_creator(context).await? {
         Some(creator) => Some(creator),
         None if data.creator.is_empty() => None,
@@ -687,6 +706,7 @@ pub(crate) async fn apply_permissions(
         Param::ChatroomCreator,
         creator.map(|contact_id| contact_id.to_u32()),
     );
+    chat.param.set_int(Param::ChatroomPermissionsRev, data.rev);
     chat.update_param(context).await?;
 
     context
@@ -742,7 +762,12 @@ pub(crate) async fn apply_permissions_from_wire(
             .has_permission(context, from_id, ChatPermission::ManagePermissionGroup)
             .await?
     {
-        bail!("{from_id} may not manage the permission groups of {chat_id}")
+        info!(
+            context,
+            "Ignoring chatroom permissions of {from_id} \
+             who may not manage the permission groups of {chat_id}."
+        );
+        return Ok(());
     }
     apply_permissions(context, chat_id, json).await
 }
@@ -750,6 +775,9 @@ pub(crate) async fn apply_permissions_from_wire(
 /// Removes all permission group assignments
 /// of a contact which was removed from the chatroom
 /// and sends the updated permission groups to the other members.
+///
+/// Leaving the chatroom ourselves needs no broadcast
+/// because we are not a member of the chatroom anymore.
 pub(crate) async fn forget_contact(
     context: &Context,
     chat_id: ChatId,
@@ -762,12 +790,14 @@ pub(crate) async fn forget_contact(
             (chat_id, contact_id),
         )
         .await?;
-    broadcast_permissions(context, chat_id, sync::Sync::Sync).await?;
+    if contact_id != ContactId::SELF {
+        broadcast_permissions(context, chat_id, sync::Sync::Sync).await?;
+    }
     Ok(())
 }
 
 /// Serializes the permission groups of the chatroom to JSON.
-async fn serialize(context: &Context, chat_id: ChatId) -> Result<String> {
+async fn serialize(context: &Context, chat_id: ChatId, rev: i64) -> Result<String> {
     let chat = Chat::load_from_db(context, chat_id).await?;
     let groups = chat_id.get_permission_groups(context).await?;
 
@@ -795,6 +825,7 @@ async fn serialize(context: &Context, chat_id: ChatId) -> Result<String> {
     };
 
     let data = PermissionsJson {
+        rev,
         creator,
         groups: groups
             .iter()

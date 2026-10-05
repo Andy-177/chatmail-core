@@ -4213,7 +4213,7 @@ pub async fn remove_contact_from_chat(
             sync = Sync;
         }
     }
-    if chat.is_chatroom() && contact_id != ContactId::SELF {
+    if chat.is_chatroom() {
         chatroom::forget_contact(context, chat_id, contact_id).await?;
     }
     context.emit_event(EventType::ChatModified(chat_id));

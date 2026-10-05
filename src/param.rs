@@ -202,6 +202,10 @@ pub enum Param {
     /// and [`ChatPermission::AssignPermissionGroup`](crate::chatroom::ChatPermission::AssignPermissionGroup).
     ChatroomCreator = b'$',
 
+    /// For Chatrooms: Increased on every change of the permission groups
+    /// so that outdated permission group messages can be detected.
+    ChatroomPermissionsRev = b'%',
+
     /// For Groups and Contacts
     ProfileImage = b'i',
 
