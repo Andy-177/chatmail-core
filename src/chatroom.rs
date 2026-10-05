@@ -622,7 +622,7 @@ pub(crate) async fn broadcast_permissions(
         .param
         .get_int(Param::ChatroomPermissionsRev)
         .unwrap_or_default()
-        + 1;
+        .saturating_add(1);
     chat.param.set_int(Param::ChatroomPermissionsRev, rev);
     chat.update_param(context).await?;
 

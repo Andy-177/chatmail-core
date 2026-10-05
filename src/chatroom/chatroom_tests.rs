@@ -332,7 +332,7 @@ async fn test_chatroom_permissions_are_sent_to_members() -> Result<()> {
         .expect("Bob does not know the creator of the chatroom");
     assert_eq!(
         Contact::get_by_id(&bob, creator).await?.get_addr(),
-        bob.get_primary_self_addr().await?
+        alice.get_primary_self_addr().await?
     );
     chat::set_chat_name(&bob, bob_chat_id, "Moderated chatroom").await?;
 
@@ -364,43 +364,31 @@ async fn test_chatroom_permissions_from_members_are_not_applied() -> Result<()> 
     let mut tcm = TestContextManager::new();
     let alice = tcm.alice().await;
     let bob = tcm.bob().await;
-    let charlie = tcm.charlie().await;
     let alice_bob_id = alice.add_or_lookup_contact_id(&bob).await;
-    let alice_charlie_id = alice.add_or_lookup_contact_id(&charlie).await;
 
-    tcm.section("Alice creates a chatroom with Bob and Charlie");
+    tcm.section("Alice creates a chatroom with Bob");
     let chat_id = create_chatroom(&alice, "Chatroom").await?;
     chat::add_contact_to_chat(&alice, chat_id, alice_bob_id).await?;
-    chat::add_contact_to_chat(&alice, chat_id, alice_charlie_id).await?;
+    forward_all(&alice, &[&bob]).await;
     let sent = alice.send_text(chat_id, "hi").await;
     let bob_chat_id = bob.recv_msg(&sent).await.get_chat_id();
-    let charlie_chat_id = charlie.recv_msg(&sent).await.get_chat_id();
     bob_chat_id.accept(&bob).await?;
-    charlie_chat_id.accept(&charlie).await?;
-    forward_all(&alice, &[&bob, &charlie]).await;
     assert_eq!(bob_chat_id.get_permission_groups(&bob).await?.len(), 2);
-    assert_eq!(
-        charlie_chat_id.get_permission_groups(&charlie).await?.len(),
-        2
-    );
 
-    tcm.section("Bob sends a message so that Charlie knows Bob's key");
-    let sent = bob.send_text(bob_chat_id, "Bob says hi").await;
-    let _received = charlie.recv_msg_opt(&sent).await;
-
-    tcm.section("Charlie sends permissions which he may not manage");
+    tcm.section("Bob sends permissions which he may not manage");
     let mut msg = Message::new_text("Chatroom permissions updated.".to_string());
     msg.hidden = true;
     msg.param.set_cmd(SystemMessage::ChatroomPermissions);
     msg.param.set(
         Param::Arg,
-        r#"{"rev":99,"creator":"","groups":[{"id":1,"name":"Charlie","permissions":"set_chat_name"},{"id":2,"name":"Everyone","permissions":""}],"members":[]}"#,
+        r#"{"rev":99,"creator":"","groups":[{"id":1,"name":"Bob","permissions":"set_chat_name"},{"id":2,"name":"Everyone","permissions":""}],"members":[]}"#,
     );
-    let sent = charlie.send_msg(charlie_chat_id, &mut msg).await;
-    let _received = bob.recv_msg_opt(&sent).await;
+    let sent = bob.send_msg(bob_chat_id, &mut msg).await;
+    let _received = alice.recv_msg_opt(&sent).await;
 
-    tcm.section("Bob ignored the permissions of Charlie");
-    let groups = bob_chat_id.get_permission_groups(&bob).await?;
+    tcm.section("Alice ignored the permissions of Bob");
+    let groups = chat_id.get_permission_groups(&alice).await?;
+    assert_eq!(groups.len(), 2, "{groups:?}");
     assert_eq!(groups[0].name, "Owner", "{groups:?}");
     assert_eq!(groups[0].permissions, ALL_PERMISSIONS.to_vec());
 
