@@ -189,7 +189,7 @@ struct PermissionsJson {
     /// so that outdated messages can be detected
     /// and messages may arrive out of order.
     #[serde(default)]
-    rev: i64,
+    rev: i32,
 
     /// Address of the contact which created the chatroom.
     creator: String,
@@ -618,7 +618,11 @@ pub(crate) async fn broadcast_permissions(
     }
 
     // Increase the revision so that members can detect outdated permissions.
-    let rev = chat.param.get_int(Param::ChatroomPermissionsRev).unwrap_or_default() + 1;
+    let rev = chat
+        .param
+        .get_int(Param::ChatroomPermissionsRev)
+        .unwrap_or_default()
+        + 1;
     chat.param.set_int(Param::ChatroomPermissionsRev, rev);
     chat.update_param(context).await?;
 
@@ -666,12 +670,14 @@ pub(crate) async fn apply_permissions(
     let data: PermissionsJson = serde_json::from_str(json)?;
 
     let mut chat = Chat::load_from_db(context, chat_id).await?;
-    let rev = chat.param.get_int(Param::ChatroomPermissionsRev).unwrap_or_default();
+    let rev = chat
+        .param
+        .get_int(Param::ChatroomPermissionsRev)
+        .unwrap_or_default();
     if data.rev < rev {
         info!(
             context,
-            "Ignoring outdated chatroom permissions of {chat_id}: rev {} < {rev}.",
-            data.rev
+            "Ignoring outdated chatroom permissions of {chat_id}: rev {} < {rev}.", data.rev
         );
         return Ok(());
     }
@@ -797,7 +803,7 @@ pub(crate) async fn forget_contact(
 }
 
 /// Serializes the permission groups of the chatroom to JSON.
-async fn serialize(context: &Context, chat_id: ChatId, rev: i64) -> Result<String> {
+async fn serialize(context: &Context, chat_id: ChatId, rev: i32) -> Result<String> {
     let chat = Chat::load_from_db(context, chat_id).await?;
     let groups = chat_id.get_permission_groups(context).await?;
 

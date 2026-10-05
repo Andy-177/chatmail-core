@@ -185,7 +185,9 @@ async fn test_chatroom_permissions() -> Result<()> {
     );
 
     tcm.section("Members of other groups do not get the permissions of 'Everyone'");
-    let silent_group_id = chat_id.create_permission_group(&alice, "Silent", &[]).await?;
+    let silent_group_id = chat_id
+        .create_permission_group(&alice, "Silent", &[])
+        .await?;
     chat_id
         .assign_permission_group(&alice, silent_group_id, bob_id)
         .await?;
