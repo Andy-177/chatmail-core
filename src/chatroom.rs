@@ -758,7 +758,8 @@ pub(crate) async fn forget_contact(
             (chat_id, contact_id),
         )
         .await?;
-    broadcast_permissions(context, chat_id, Sync::Sync).await
+    broadcast_permissions(context, chat_id, Sync::Sync).await?;
+    Ok(())
 }
 
 /// Serializes the permission groups of the chatroom to JSON.
