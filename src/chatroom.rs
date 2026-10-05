@@ -229,7 +229,7 @@ pub async fn create_chatroom(context: &Context, name: &str) -> Result<ChatId> {
     insert_group(context, chat_id, EVERYONE_GROUP, "Everyone", &[]).await?;
     insert_group_member(context, chat_id, OWNER_GROUP, ContactId::SELF).await?;
 
-    broadcast_permissions(context, chat_id, crate::sync::Sync::Sync).await?;
+    broadcast_permissions(context, chat_id, sync::Sync::Sync).await?;
     Ok(chat_id)
 }
 
@@ -321,7 +321,7 @@ impl ChatId {
             .await?;
         insert_group(context, *self, id, &name, permissions).await?;
 
-        broadcast_permissions(context, *self, crate::sync::Sync::Sync).await?;
+        broadcast_permissions(context, *self, sync::Sync::Sync).await?;
         Ok(id)
     }
 
@@ -356,7 +356,7 @@ impl ChatId {
             .await?;
         ensure!(changed > 0, "Unknown permission group {group_id}");
 
-        broadcast_permissions(context, *self, crate::sync::Sync::Sync).await?;
+        broadcast_permissions(context, *self, sync::Sync::Sync).await?;
         Ok(())
     }
 
@@ -393,7 +393,7 @@ impl ChatId {
             )
             .await?;
 
-        broadcast_permissions(context, *self, crate::sync::Sync::Sync).await?;
+        broadcast_permissions(context, *self, sync::Sync::Sync).await?;
         Ok(())
     }
 
@@ -447,7 +447,7 @@ impl ChatId {
         );
 
         insert_group_member(context, *self, group_id, contact_id).await?;
-        broadcast_permissions(context, *self, crate::sync::Sync::Sync).await?;
+        broadcast_permissions(context, *self, sync::Sync::Sync).await?;
         Ok(())
     }
 
@@ -477,7 +477,7 @@ impl ChatId {
             )
             .await?;
 
-        broadcast_permissions(context, *self, crate::sync::Sync::Sync).await?;
+        broadcast_permissions(context, *self, sync::Sync::Sync).await?;
         Ok(())
     }
 
@@ -608,7 +608,7 @@ async fn ensure_chatroom(context: &Context, chat_id: ChatId) -> Result<()> {
 pub(crate) async fn broadcast_permissions(
     context: &Context,
     chat_id: ChatId,
-    sync: crate::sync::Sync::Sync,
+    sync: sync::Sync::Sync,
 ) -> Result<()> {
     let chat = Chat::load_from_db(context, chat_id).await?;
     if !chat.is_chatroom() {
@@ -762,7 +762,7 @@ pub(crate) async fn forget_contact(
             (chat_id, contact_id),
         )
         .await?;
-    broadcast_permissions(context, chat_id, crate::sync::Sync::Sync).await?;
+    broadcast_permissions(context, chat_id, sync::Sync::Sync).await?;
     Ok(())
 }
 
