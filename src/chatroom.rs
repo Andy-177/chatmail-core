@@ -61,7 +61,7 @@ use crate::log::{LogExt as _, warn};
 use crate::message::Message;
 use crate::mimeparser::SystemMessage;
 use crate::param::Param;
-use crate::sync::{self, Sync};
+use crate::sync;
 
 /// ID of the built-in "Owner" permission group.
 const OWNER_GROUP: u32 = 1;
