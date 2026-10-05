@@ -356,7 +356,8 @@ impl ChatId {
             .await?;
         ensure!(changed > 0, "Unknown permission group {group_id}");
 
-        broadcast_permissions(context, *self, crate::sync::Sync).await?
+        broadcast_permissions(context, *self, crate::sync::Sync).await?;
+        Ok(())
     }
 
     /// Deletes a permission group of the chatroom.
@@ -392,7 +393,8 @@ impl ChatId {
             )
             .await?;
 
-        broadcast_permissions(context, *self, crate::sync::Sync).await?
+        broadcast_permissions(context, *self, crate::sync::Sync).await?;
+        Ok(())
     }
 
     /// Returns the contacts which are members
@@ -445,7 +447,8 @@ impl ChatId {
         );
 
         insert_group_member(context, *self, group_id, contact_id).await?;
-        broadcast_permissions(context, *self, crate::sync::Sync).await?
+        broadcast_permissions(context, *self, crate::sync::Sync).await?;
+        Ok(())
     }
 
     /// Removes a contact from a permission group of the chatroom.
@@ -474,7 +477,8 @@ impl ChatId {
             )
             .await?;
 
-        broadcast_permissions(context, *self, crate::sync::Sync).await?
+        broadcast_permissions(context, *self, crate::sync::Sync).await?;
+        Ok(())
     }
 
     /// Returns all permissions the contact has in the chatroom,
