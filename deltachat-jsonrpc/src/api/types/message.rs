@@ -431,6 +431,9 @@ pub enum SystemMessageType {
     CallEnded,
     MessagePinned,
     MessageUnpinned,
+
+    /// Hidden message that contains the permission groups of a chatroom.
+    ChatroomPermissions,
 }
 
 impl From<deltachat::mimeparser::SystemMessage> for SystemMessageType {
@@ -462,6 +465,7 @@ impl From<deltachat::mimeparser::SystemMessage> for SystemMessageType {
             SystemMessage::CallEnded => SystemMessageType::CallEnded,
             SystemMessage::MessagePinned => SystemMessageType::MessagePinned,
             SystemMessage::MessageUnpinned => SystemMessageType::MessageUnpinned,
+            SystemMessage::ChatroomPermissions => SystemMessageType::ChatroomPermissions,
         }
     }
 }
