@@ -229,7 +229,7 @@ pub async fn create_chatroom(context: &Context, name: &str) -> Result<ChatId> {
     insert_group(context, chat_id, EVERYONE_GROUP, "Everyone", &[]).await?;
     insert_group_member(context, chat_id, OWNER_GROUP, ContactId::SELF).await?;
 
-    broadcast_permissions(context, chat_id, crate::crate::sync::Sync).await?;
+    broadcast_permissions(context, chat_id, crate::sync::Sync).await?;
     Ok(chat_id)
 }
 
