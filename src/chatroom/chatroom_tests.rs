@@ -17,7 +17,7 @@ async fn forward_all(from: &TestContext, to: &TestContext) {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_create_chatroom() -> Result<()> {
     let mut tcm = TestContextManager::new();
     let alice = tcm.alice().await;
@@ -70,7 +70,7 @@ async fn test_create_chatroom() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_chatroom_permissions() -> Result<()> {
     let mut tcm = TestContextManager::new();
     let alice = tcm.alice().await;
@@ -198,7 +198,7 @@ async fn test_chatroom_permissions() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_chatroom_permissions_are_kept_by_the_creator() -> Result<()> {
     let mut tcm = TestContextManager::new();
     let alice = tcm.alice().await;
@@ -261,7 +261,7 @@ async fn test_chatroom_permissions_are_kept_by_the_creator() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_chatroom_permissions_are_sent_to_members() -> Result<()> {
     let mut tcm = TestContextManager::new();
     let alice = tcm.alice().await;
@@ -341,7 +341,7 @@ async fn test_chatroom_permissions_are_sent_to_members() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_chatroom_permissions_from_members_are_not_applied() -> Result<()> {
     let mut tcm = TestContextManager::new();
     let alice = tcm.alice().await;

@@ -316,7 +316,7 @@ impl ChatId {
             .query_row(
                 "SELECT IFNULL(MAX(id), 0)+1 FROM chatroom_permission_groups WHERE chat_id=?",
                 (*self,),
-                |row| Ok(row.get(0)?),
+                |row| row.get(0),
             )
             .await?;
         insert_group(context, *self, id, &name, permissions).await?;
