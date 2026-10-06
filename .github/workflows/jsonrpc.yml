@@ -40,6 +40,7 @@ jobs:
         run: npm run test
         env:
           CHATMAIL_DOMAIN: ${{ vars.CHATMAIL_DOMAIN }}
+          COVERAGE_OFFLINE: "1"
       - name: Run linter
         working-directory: deltachat-jsonrpc-bindings/typescript
         run: npm run prettier:check
