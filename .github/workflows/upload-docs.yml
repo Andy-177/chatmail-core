@@ -19,15 +19,17 @@ jobs:
         with:
           show-progress: false
           persist-credentials: false
+
       - name: Build the documentation with cargo
         run: |
           cargo doc --package deltachat --no-deps --document-private-items
-      - name: Upload to rs.delta.chat
-        run: |
-          mkdir -p "$HOME/.ssh"
-          echo "${{ secrets.RS_DOCS_SSH_KEY }}" > "$HOME/.ssh/key"
-          chmod 600 "$HOME/.ssh/key"
-          rsync -avzh -e "ssh -i $HOME/.ssh/key -o StrictHostKeyChecking=no" $GITHUB_WORKSPACE/target/doc/ "${{ secrets.RS_DOCS_SSH_USER }}@rs.delta.chat:"
+
+      - name: Upload Rust docs as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deltachat-rs-docs
+          path: ${{ github.workspace }}/target/doc/
+          retention-days: 30
 
   build-python:
     runs-on: ubuntu-latest
@@ -41,15 +43,18 @@ jobs:
           show-progress: false
           persist-credentials: false
           fetch-depth: 0 # Fetch history to calculate VCS version number.
+
       - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+
       - name: Build Python documentation
         run: nix build .#python-docs
-      - name: Upload to py.delta.chat
-        run: |
-          mkdir -p "$HOME/.ssh"
-          echo "${{ secrets.PY_DOCS_SSH_KEY }}" > "$HOME/.ssh/key"
-          chmod 600 "$HOME/.ssh/key"
-          rsync -avzh --delete -e "ssh -i $HOME/.ssh/key -o StrictHostKeyChecking=no" $GITHUB_WORKSPACE/result/html/ "${{ secrets.PY_DOCS_SSH_USER }}@py.delta.chat:"
+
+      - name: Upload Python docs as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deltachat-python-docs
+          path: ${{ github.workspace }}/result/html/
+          retention-days: 30
 
   build-c:
     runs-on: ubuntu-latest
@@ -63,15 +68,18 @@ jobs:
           show-progress: false
           persist-credentials: false
           fetch-depth: 0 # Fetch history to calculate VCS version number.
+
       - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+
       - name: Build C documentation
         run: nix build .#docs
-      - name: Upload to c.delta.chat
-        run: |
-          mkdir -p "$HOME/.ssh"
-          echo "${{ secrets.C_DOCS_SSH_KEY }}" > "$HOME/.ssh/key"
-          chmod 600 "$HOME/.ssh/key"
-          rsync -avzh --delete -e "ssh -i $HOME/.ssh/key -o StrictHostKeyChecking=no" $GITHUB_WORKSPACE/result/html/ "${{ secrets.C_DOCS_SSH_USER }}@c.delta.chat:"
+
+      - name: Upload C docs as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deltachat-c-docs
+          path: ${{ github.workspace }}/result/html/
+          retention-days: 30
 
   build-ts:
     runs-on: ubuntu-latest
@@ -89,22 +97,27 @@ jobs:
           show-progress: false
           persist-credentials: false
           fetch-depth: 0 # Fetch history to calculate VCS version number.
+
       - name: Use Node.js
         uses: actions/setup-node@v7
         with:
           node-version: 24
+
       - name: npm install
         run: npm install
+
       - name: npm run build
         run: npm run build
+
       - name: Run docs script
         run: npm run docs
-      - name: Upload to js.jsonrpc.delta.chat
-        run: |
-          mkdir -p "$HOME/.ssh"
-          echo "${{ secrets.JS_JSONRPC_DOCS_SSH_KEY }}" > "$HOME/.ssh/key"
-          chmod 600 "$HOME/.ssh/key"
-          rsync -avzh --delete -e "ssh -i $HOME/.ssh/key -o StrictHostKeyChecking=no" $GITHUB_WORKSPACE/deltachat-jsonrpc-bindings/typescript/docs/ "${{ secrets.JS_JSONRPC_DOCS_SSH_USER }}@js.jsonrpc.delta.chat:"
+
+      - name: Upload TS docs as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deltachat-ts-docs
+          path: ${{ github.workspace }}/deltachat-jsonrpc-bindings/typescript/docs/
+          retention-days: 30
 
   build-cffi:
     runs-on: ubuntu-latest
@@ -117,12 +130,14 @@ jobs:
         with:
           show-progress: false
           persist-credentials: false
+
       - name: Build the documentation with cargo
         run: |
           cargo doc --package deltachat_ffi --no-deps
-      - name: Upload to cffi.delta.chat
-        run: |
-          mkdir -p "$HOME/.ssh"
-          echo "${{ secrets.CFFI_DOCS_SSH_KEY }}" > "$HOME/.ssh/key"
-          chmod 600 "$HOME/.ssh/key"
-          rsync -avzh --delete -e "ssh -i $HOME/.ssh/key -o StrictHostKeyChecking=no" $GITHUB_WORKSPACE/target/doc/ "${{ secrets.CFFI_DOCS_SSH_USER }}@delta.chat:"
+
+      - name: Upload CFFI docs as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deltachat-cffi-docs
+          path: ${{ github.workspace }}/target/doc/
+          retention-days: 30
