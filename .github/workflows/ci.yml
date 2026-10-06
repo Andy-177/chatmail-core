@@ -25,6 +25,8 @@ env:
   # Minimum Supported Rust Version
   MSRV: 1.89.0
 
+  # Test Domain:
+  CHATMAIL_DOMAIN: nine.testrun.org
 jobs:
   lint_rust:
     name: Lint Rust
