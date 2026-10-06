@@ -101,6 +101,17 @@ class Chat:
         """Returns True if this chat is the "Device Messages" chat, False otherwise."""
         return bool(lib.dc_chat_is_device_talk(self._dc_chat))
 
+    def is_chatroom(self) -> bool:
+        """Return True if this chat is a chatroom, False otherwise.
+
+        A chatroom is a group chat with a permission group system,
+        everything that can be done with group chats
+        can be done with chatrooms as well.
+
+        :returns: True if chat is a chatroom, False otherwise
+        """
+        return bool(lib.dc_chat_is_chatroom(self._dc_chat))
+
     def is_muted(self) -> bool:
         """return true if this chat is muted.
 
@@ -489,6 +500,182 @@ class Chat:
         if dc_res == ffi.NULL:
             return None
         return from_dc_charpointer(dc_res)
+
+    # ------  chatroom permission API ------------------------------
+
+    def get_chatroom_creator(self):
+        """Return the contact which created this chatroom, or None.
+
+        :returns: :class:`deltachat.contact.Contact` or None
+        """
+        from .contact import Contact
+
+        contact_id = lib.dc_get_chatroom_creator(self.account._dc_context, self.id)
+        if contact_id == 0:
+            return None
+        return Contact(self.account, contact_id)
+
+    def get_permission_group_ids(self) -> list[int]:
+        """Return the IDs of the permission groups of this chatroom.
+
+        The built-in permission groups "Owner" and "Everyone" are contained
+        in the result and cannot be deleted.
+
+        :returns: list of permission group IDs
+        """
+        dc_array = ffi.gc(
+            lib.dc_get_permission_group_ids(self.account._dc_context, self.id),
+            lib.dc_array_unref,
+        )
+        return list(iter_array(dc_array, lambda x: x))
+
+    def get_permission_group_name(self, group_id: int) -> str:
+        """Return the name of a permission group of this chatroom.
+
+        :param group_id: the permission group ID
+        :returns: the name of the permission group, empty if it does not exist
+        """
+        return from_dc_charpointer(lib.dc_get_permission_group_name(self.account._dc_context, self.id, group_id))
+
+    def get_permission_group_permissions(self, group_id: int) -> list[str]:
+        """Return the permission keys of a permission group of this chatroom.
+
+        :param group_id: the permission group ID
+        :returns: list of permission keys, e.g. ``["set_chat_name"]``
+        """
+        res = lib.dc_get_permission_group_permissions(self.account._dc_context, self.id, group_id)
+        permissions = from_dc_charpointer(res)
+        return permissions.split(",") if permissions else []
+
+    def create_permission_group(self, name: str, permissions=None) -> int:
+        """Create a permission group in this chatroom.
+
+        Requires the ``manage_permission_group`` permission.
+
+        :param name: name of the permission group
+        :param permissions: list of permission keys, e.g. ``["set_chat_name"]``
+        :raises ValueError: if the permission group could not be created
+        :returns: the ID of the new permission group
+        """
+        res = lib.dc_create_permission_group(
+            self.account._dc_context,
+            self.id,
+            as_dc_charpointer(name),
+            as_dc_charpointer(",".join(permissions or [])),
+        )
+        if res == 0:
+            raise ValueError("could not create permission group")
+        return res
+
+    def set_permission_group(self, group_id: int, name: str, permissions=None) -> None:
+        """Change the name and the permissions of a permission group of this chatroom.
+
+        Requires the ``manage_permission_group`` permission.
+
+        :param group_id: the permission group ID
+        :param name: the new name of the permission group
+        :param permissions: list of permission keys, e.g. ``["set_chat_name"]``
+        :raises ValueError: if the permission group could not be changed
+        """
+        res = lib.dc_set_permission_group(
+            self.account._dc_context,
+            self.id,
+            group_id,
+            as_dc_charpointer(name),
+            as_dc_charpointer(",".join(permissions or [])),
+        )
+        if not res:
+            raise ValueError("could not change permission group")
+
+    def delete_permission_group(self, group_id: int) -> None:
+        """Delete a permission group of this chatroom.
+
+        The built-in permission groups "Owner" and "Everyone" cannot be deleted.
+        Requires the ``manage_permission_group`` permission.
+
+        :param group_id: the permission group ID
+        :raises ValueError: if the permission group could not be deleted
+        """
+        res = lib.dc_delete_permission_group(self.account._dc_context, self.id, group_id)
+        if not res:
+            raise ValueError("could not delete permission group")
+
+    def get_permission_group_members(self, group_id: int) -> list:
+        """Return the contacts which are members of a permission group of this chatroom.
+
+        :param group_id: the permission group ID
+        :returns: list of :class:`deltachat.contact.Contact` objects
+        """
+        from .contact import Contact
+
+        dc_array = ffi.gc(
+            lib.dc_get_permission_group_members(self.account._dc_context, self.id, group_id),
+            lib.dc_array_unref,
+        )
+        return list(iter_array(dc_array, lambda x: Contact(self.account, x)))
+
+    def assign_permission_group(self, group_id: int, obj) -> None:
+        """Add a contact to a permission group of this chatroom.
+
+        Requires the ``assign_permission_group`` permission.
+
+        :param group_id: the permission group ID
+        :params obj: Contact, Account or e-mail address.
+        :raises ValueError: if the contact could not be added
+        """
+        contact = self.account.get_contact(obj)
+        if contact is None:
+            raise ValueError(f"unknown contact: {obj!r}")
+        res = lib.dc_assign_permission_group(self.account._dc_context, self.id, group_id, contact.id)
+        if not res:
+            raise ValueError(f"could not add contact {contact!r} to permission group")
+
+    def revoke_permission_group(self, group_id: int, obj) -> None:
+        """Remove a contact from a permission group of this chatroom.
+
+        Requires the ``assign_permission_group`` permission.
+
+        :param group_id: the permission group ID
+        :params obj: Contact, Account or e-mail address.
+        :raises ValueError: if the contact could not be removed
+        """
+        contact = self.account.get_contact(obj)
+        if contact is None:
+            raise ValueError(f"unknown contact: {obj!r}")
+        res = lib.dc_revoke_permission_group(self.account._dc_context, self.id, group_id, contact.id)
+        if not res:
+            raise ValueError(f"could not remove contact {contact!r} from permission group")
+
+    def get_permissions(self, obj) -> list[str]:
+        """Return all permissions a contact has in this chatroom.
+
+        All permissions are granted in chats which are not chatrooms.
+
+        :params obj: Contact, Account or e-mail address.
+        :returns: list of permission keys
+        """
+        contact = self.account.get_contact(obj)
+        if contact is None:
+            raise ValueError(f"unknown contact: {obj!r}")
+        res = lib.dc_get_contact_permissions(self.account._dc_context, self.id, contact.id)
+        permissions = from_dc_charpointer(res)
+        return permissions.split(",") if permissions else []
+
+    def has_permission(self, obj, permission: str) -> bool:
+        """Return True if a contact has the given permission in this chatroom.
+
+        All permissions are granted in chats which are not chatrooms.
+
+        :params obj: Contact, Account or e-mail address.
+        :param permission: a permission key, e.g. ``"set_chat_name"``
+        :returns: True if the contact has the permission, False otherwise
+        """
+        contact = self.account.get_contact(obj)
+        if contact is None:
+            raise ValueError(f"unknown contact: {obj!r}")
+        permission_c = as_dc_charpointer(permission)
+        res = lib.dc_has_permission(self.account._dc_context, self.id, contact.id, permission_c)
+        return bool(res)
 
     # ------  location streaming API ------------------------------
 

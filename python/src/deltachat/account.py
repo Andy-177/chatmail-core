@@ -420,6 +420,22 @@ class Account:
                 chat.add_contact(contact)
         return chat
 
+    def create_chatroom(self, name: str) -> Chat:
+        """create a new chatroom object.
+
+        A chatroom is a group chat with a permission group system,
+        everything that can be done with group chats
+        can be done with chatrooms as well.
+
+        :param name: name of the chatroom
+        :raises ValueError: if the chatroom could not be created
+        :returns: a :class:`deltachat.chat.Chat` object.
+        """
+        chat_id = lib.dc_create_chatroom(self._dc_context, name.encode("utf8"))
+        if chat_id == 0:
+            raise ValueError("could not create chatroom")
+        return Chat(self, chat_id)
+
     def get_chats(self) -> List[Chat]:
         """return list of chats.
 

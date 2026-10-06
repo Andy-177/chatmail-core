@@ -49,6 +49,10 @@ pub struct FullChat {
     chat_type: JsonrpcChatType,
     is_unpromoted: bool,
     is_self_talk: bool,
+
+    /// True if the chat is a chatroom, i.e. a group chat with permission groups,
+    /// see `create_chatroom`.
+    is_chatroom: bool,
     contact_ids: Vec<u32>,
 
     /// Contact IDs of the past chat members.
@@ -119,6 +123,7 @@ impl FullChat {
             chat_type: chat.get_type().into(),
             is_unpromoted: chat.is_unpromoted(),
             is_self_talk: chat.is_self_talk(),
+            is_chatroom: chat.is_chatroom(),
             contact_ids: contact_ids.iter().map(|id| id.to_u32()).collect(),
             past_contact_ids: past_contact_ids.iter().map(|id| id.to_u32()).collect(),
             color,
@@ -179,6 +184,10 @@ pub struct BasicChat {
     chat_type: JsonrpcChatType,
     is_unpromoted: bool,
     is_self_talk: bool,
+
+    /// True if the chat is a chatroom, i.e. a group chat with permission groups,
+    /// see `create_chatroom`.
+    is_chatroom: bool,
     color: String,
     is_contact_request: bool,
 
@@ -207,6 +216,7 @@ impl BasicChat {
             chat_type: chat.get_type().into(),
             is_unpromoted: chat.is_unpromoted(),
             is_self_talk: chat.is_self_talk(),
+            is_chatroom: chat.is_chatroom(),
             color,
             is_contact_request: chat.is_contact_request(),
             is_device_chat: chat.is_device_talk(),
@@ -289,6 +299,30 @@ impl From<JsonrpcChatType> for Chattype {
             JsonrpcChatType::Mailinglist => Chattype::Mailinglist,
             JsonrpcChatType::OutBroadcast => Chattype::OutBroadcast,
             JsonrpcChatType::InBroadcast => Chattype::InBroadcast,
+        }
+    }
+}
+
+/// A permission group of a chatroom, see `create_permission_group`.
+#[derive(Clone, Serialize, Deserialize, TypeDef, schemars::JsonSchema)]
+pub struct PermissionGroup {
+    /// ID of the group, unique within the chatroom.
+    id: u32,
+
+    /// Name of the group, e.g. to be displayed to users.
+    name: String,
+
+    /// Keys of the permissions which all members of this group have,
+    /// e.g. `["set_chat_name"]`.
+    permissions: Vec<String>,
+}
+
+impl From<deltachat::chatroom::PermissionGroup> for PermissionGroup {
+    fn from(group: deltachat::chatroom::PermissionGroup) -> Self {
+        Self {
+            id: group.id,
+            name: group.name,
+            permissions: group.permissions.iter().map(|p| p.key().to_owned()).collect(),
         }
     }
 }

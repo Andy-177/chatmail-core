@@ -3,7 +3,7 @@
 use anyhow::Result;
 
 use crate::chat::{self, Chat};
-use crate::chatroom::{ALL_PERMISSIONS, ChatPermission, create_chatroom};
+use crate::chatroom::{ALL_PERMISSIONS, ChatPermission, create_chatroom, parse_permissions};
 use crate::contact::{Contact, ContactId};
 use crate::message::Message;
 use crate::mimeparser::SystemMessage;
@@ -391,5 +391,13 @@ async fn test_chatroom_permissions_from_members_are_not_applied() -> Result<()> 
     assert_eq!(groups[0].name, "Owner", "{groups:?}");
     assert_eq!(groups[0].permissions, ALL_PERMISSIONS.to_vec());
 
+    Ok(())
+}
+
+#[test]
+fn test_parse_permissions() -> Result<()> {
+    let permissions = parse_permissions(["set_chat_name", "set_chat_name", ""])?;
+    assert_eq!(permissions, vec![ChatPermission::SetChatName]);
+    assert!(parse_permissions(["unknown_permission"]).is_err());
     Ok(())
 }

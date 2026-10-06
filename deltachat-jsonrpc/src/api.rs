@@ -16,6 +16,7 @@ use deltachat::chat::{
     marknoticed_all_chats, marknoticed_chat, remove_contact_from_chat,
 };
 use deltachat::chatlist::Chatlist;
+use deltachat::chatroom;
 use deltachat::config::{Config, get_all_ui_config_keys};
 use deltachat::contact::{Contact, ContactId, Origin, may_be_valid_addr};
 use deltachat::context::get_info;
@@ -47,7 +48,7 @@ pub mod types;
 use num_traits::FromPrimitive;
 use types::account::Account;
 use types::calls::JsonrpcCallInfo;
-use types::chat::FullChat;
+use types::chat::{FullChat, PermissionGroup};
 use types::contact::{ContactObject, VcardContact};
 use types::events::Event;
 use types::http::HttpResponse;
@@ -1063,6 +1064,184 @@ impl CommandApi {
         chat::create_group_unencrypted(&ctx, &name)
             .await
             .map(|id| id.to_u32())
+    }
+
+    /// Create a new chatroom, i.e. a group chat with a permission group system.
+    ///
+    /// The chatroom starts with the built-in permission groups "Owner" and "Everyone".
+    /// The creator is a member of "Owner" and can never lose
+    /// the `manage_permission_group` and `assign_permission_group` permissions.
+    ///
+    /// Returns the created chat's id.
+    async fn create_chatroom(&self, account_id: u32, name: String) -> Result<u32> {
+        let ctx = self.get_context(account_id).await?;
+        chatroom::create_chatroom(&ctx, &name)
+            .await
+            .map(|id| id.to_u32())
+    }
+
+    /// Returns the permission groups of the chatroom, ordered by ID.
+    ///
+    /// The built-in groups "Owner" and "Everyone" are contained in the result
+    /// and cannot be deleted.
+    /// Chats which are not chatrooms have no permission groups.
+    async fn get_permission_groups(
+        &self,
+        account_id: u32,
+        chat_id: u32,
+    ) -> Result<Vec<PermissionGroup>> {
+        let ctx = self.get_context(account_id).await?;
+        let groups = ChatId::new(chat_id).get_permission_groups(&ctx).await?;
+        Ok(groups.into_iter().map(PermissionGroup::from).collect())
+    }
+
+    /// Creates a new permission group in the chatroom and returns its ID.
+    ///
+    /// `permissions` contains permission keys, e.g. `["set_chat_name"]`.
+    /// Requires the `manage_permission_group` permission.
+    async fn create_permission_group(
+        &self,
+        account_id: u32,
+        chat_id: u32,
+        name: String,
+        permissions: Vec<String>,
+    ) -> Result<u32> {
+        let ctx = self.get_context(account_id).await?;
+        let permissions = chatroom::parse_permissions(permissions.iter().map(String::as_str))?;
+        ChatId::new(chat_id)
+            .create_permission_group(&ctx, &name, &permissions)
+            .await
+    }
+
+    /// Changes the name and the permissions of a permission group of the chatroom.
+    ///
+    /// `permissions` contains permission keys, e.g. `["set_chat_name"]`.
+    /// Requires the `manage_permission_group` permission.
+    async fn set_permission_group(
+        &self,
+        account_id: u32,
+        chat_id: u32,
+        group_id: u32,
+        name: String,
+        permissions: Vec<String>,
+    ) -> Result<()> {
+        let ctx = self.get_context(account_id).await?;
+        let permissions = chatroom::parse_permissions(permissions.iter().map(String::as_str))?;
+        ChatId::new(chat_id)
+            .set_permission_group(&ctx, group_id, &name, &permissions)
+            .await
+    }
+
+    /// Deletes a permission group of the chatroom.
+    ///
+    /// The built-in groups "Owner" and "Everyone" cannot be deleted.
+    /// Requires the `manage_permission_group` permission.
+    async fn delete_permission_group(
+        &self,
+        account_id: u32,
+        chat_id: u32,
+        group_id: u32,
+    ) -> Result<()> {
+        let ctx = self.get_context(account_id).await?;
+        ChatId::new(chat_id)
+            .delete_permission_group(&ctx, group_id)
+            .await
+    }
+
+    /// Returns the contact IDs which are members of a permission group
+    /// of the chatroom, ordered by contact ID.
+    async fn get_permission_group_members(
+        &self,
+        account_id: u32,
+        chat_id: u32,
+        group_id: u32,
+    ) -> Result<Vec<u32>> {
+        let ctx = self.get_context(account_id).await?;
+        let members = ChatId::new(chat_id)
+            .get_permission_group_members(&ctx, group_id)
+            .await?;
+        Ok(members.iter().map(|id| id.to_u32()).collect())
+    }
+
+    /// Adds a contact to a permission group of the chatroom.
+    ///
+    /// A contact may be a member of multiple permission groups
+    /// and then has the permissions of all of them.
+    /// Requires the `assign_permission_group` permission.
+    async fn assign_permission_group(
+        &self,
+        account_id: u32,
+        chat_id: u32,
+        group_id: u32,
+        contact_id: u32,
+    ) -> Result<()> {
+        let ctx = self.get_context(account_id).await?;
+        ChatId::new(chat_id)
+            .assign_permission_group(&ctx, group_id, ContactId::new(contact_id))
+            .await
+    }
+
+    /// Removes a contact from a permission group of the chatroom.
+    ///
+    /// Requires the `assign_permission_group` permission.
+    async fn revoke_permission_group(
+        &self,
+        account_id: u32,
+        chat_id: u32,
+        group_id: u32,
+        contact_id: u32,
+    ) -> Result<()> {
+        let ctx = self.get_context(account_id).await?;
+        ChatId::new(chat_id)
+            .revoke_permission_group(&ctx, group_id, ContactId::new(contact_id))
+            .await
+    }
+
+    /// Returns the permission keys the contact has in the chatroom,
+    /// e.g. `["set_chat_name"]`.
+    async fn get_contact_permissions(
+        &self,
+        account_id: u32,
+        chat_id: u32,
+        contact_id: u32,
+    ) -> Result<Vec<String>> {
+        let ctx = self.get_context(account_id).await?;
+        let permissions = ChatId::new(chat_id)
+            .get_contact_permissions(&ctx, ContactId::new(contact_id))
+            .await?;
+        Ok(permissions.iter().map(|p| p.key().to_owned()).collect())
+    }
+
+    /// Returns `true` if the contact has the given permission in the chatroom.
+    ///
+    /// `permission` is a permission key, e.g. `set_chat_name`.
+    /// All permissions are granted in chats which are not chatrooms.
+    async fn has_chat_permission(
+        &self,
+        account_id: u32,
+        chat_id: u32,
+        contact_id: u32,
+        permission: String,
+    ) -> Result<bool> {
+        let ctx = self.get_context(account_id).await?;
+        let permission = chatroom::ChatPermission::new(&permission)
+            .with_context(|| format!("Unknown chatroom permission {permission:?}"))?;
+        ChatId::new(chat_id)
+            .has_permission(&ctx, ContactId::new(contact_id), permission)
+            .await
+    }
+
+    /// Returns the contact ID which created the chatroom.
+    ///
+    /// Returns `null` if the chat is not a chatroom
+    /// or if there is no contact which created it.
+    async fn get_chatroom_creator(&self, account_id: u32, chat_id: u32) -> Result<Option<u32>> {
+        let ctx = self.get_context(account_id).await?;
+        let creator = Chat::load_from_db(&ctx, ChatId::new(chat_id))
+            .await?
+            .get_chatroom_creator(&ctx)
+            .await?;
+        Ok(creator.map(|id| id.to_u32()))
     }
 
     /// Deprecated 2025-07 in favor of create_broadcast().

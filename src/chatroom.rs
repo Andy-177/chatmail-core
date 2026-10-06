@@ -48,7 +48,7 @@
 //! A member can still send a message
 //! which would not pass the permission check of the receiving device.
 
-use anyhow::{Result, bail, ensure};
+use anyhow::{Context as _, Result, bail, ensure};
 use deltachat_contact_tools::sanitize_single_line;
 use serde::{Deserialize, Serialize};
 
@@ -148,13 +148,39 @@ impl ChatPermission {
     }
 }
 
-/// Serializes permissions to a comma-separated string.
-fn permissions_to_string(permissions: &[ChatPermission]) -> String {
+/// Serializes permissions to a comma-separated string of [`ChatPermission::key`]s.
+pub fn permissions_to_string(permissions: &[ChatPermission]) -> String {
     permissions
         .iter()
         .map(|permission| permission.key())
         .collect::<Vec<&str>>()
         .join(",")
+}
+
+/// Parses an iterable of [`ChatPermission::key`]s, e.g. `["set_chat_name"]`.
+///
+/// Unknown keys are rejected as this function only parses input of the
+/// local user or a UI, never a received message.
+/// Received permissions are parsed with `permissions_from_string` instead,
+/// which silently ignores keys this version does not know yet.
+///
+/// Empty keys are skipped, so `"".split(',')` may be passed in.
+pub fn parse_permissions<'a, I>(keys: I) -> Result<Vec<ChatPermission>>
+where
+    I: IntoIterator<Item = &'a str>,
+{
+    let mut permissions = Vec::new();
+    for key in keys {
+        if key.is_empty() {
+            continue;
+        }
+        let permission = ChatPermission::new(key)
+            .with_context(|| format!("Unknown chatroom permission {key:?}"))?;
+        if !permissions.contains(&permission) {
+            permissions.push(permission);
+        }
+    }
+    Ok(permissions)
 }
 
 /// Parses a comma-separated string of [`ChatPermission::key`]s,

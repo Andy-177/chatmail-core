@@ -1748,6 +1748,219 @@ uint32_t        dc_create_group_chat         (dc_context_t* context, int protect
 
 
 /**
+ * Create a new chatroom.
+ *
+ * A chatroom is a group chat with a permission group system,
+ * everything that can be done with group chats
+ * can be done with chatrooms as well.
+ *
+ * A chatroom has two built-in permission groups which cannot be deleted:
+ * - "Owner" has all permissions by default,
+ *   the creator of the chatroom is a member of this group.
+ * - "Everyone" has no permissions by default.
+ *
+ * Chatroom permissions are checked on the device which performs an action,
+ * they are not enforced against messages received from other members.
+ *
+ * @memberof dc_context_t
+ * @param context The context object.
+ * @param name The name of the chatroom to create.
+ *     The name may be changed later using dc_set_chat_name().
+ * @return The chat ID of the new chatroom, 0 on errors.
+ */
+uint32_t        dc_create_chatroom             (dc_context_t* context, const char* name);
+
+
+/**
+ * Get the contact ID which created a chatroom.
+ *
+ * The creator of a chatroom can never be deprived of
+ * the `manage_permission_group` and `assign_permission_group` permissions.
+ *
+ * @memberof dc_context_t
+ * @param context The context object.
+ * @param chat_id The chat ID.
+ * @return The contact ID which created the chatroom,
+ *     0 if the chat is not a chatroom or if there is no such contact.
+ */
+uint32_t        dc_get_chatroom_creator        (dc_context_t* context, uint32_t chat_id);
+
+
+/**
+ * Get the IDs of the permission groups of a chatroom.
+ *
+ * The built-in permission groups "Owner" and "Everyone" are included
+ * and cannot be deleted.
+ *
+ * @memberof dc_context_t
+ * @param context The context object.
+ * @param chat_id The chat ID.
+ * @return An array of permission group IDs;
+ *     must be freed using dc_array_unref() when no longer needed.
+ *     Chats which are not chatrooms return an empty array.
+ */
+dc_array_t*     dc_get_permission_group_ids    (dc_context_t* context, uint32_t chat_id);
+
+
+/**
+ * Get the name of a permission group of a chatroom.
+ *
+ * @memberof dc_context_t
+ * @param context The context object.
+ * @param chat_id The chat ID.
+ * @param group_id The permission group ID.
+ * @return The name of the permission group or an empty string
+ *     if the permission group does not exist;
+ *     must be released using dc_str_unref() after usage.
+ */
+char*           dc_get_permission_group_name (dc_context_t* context, uint32_t chat_id, uint32_t group_id);
+
+
+/**
+ * Get the permissions of a permission group of a chatroom.
+ *
+ * @memberof dc_context_t
+ * @param context The context object.
+ * @param chat_id The chat ID.
+ * @param group_id The permission group ID.
+ * @return A comma-separated list of permission keys,
+ *     e.g. "set_chat_name,assign_permission_group",
+ *     or an empty string if the permission group does not exist;
+ *     must be released using dc_str_unref() after usage.
+ */
+char*           dc_get_permission_group_permissions (dc_context_t* context, uint32_t chat_id, uint32_t group_id);
+
+
+/**
+ * Create a new permission group in a chatroom.
+ *
+ * Requires the `manage_permission_group` permission.
+ *
+ * @memberof dc_context_t
+ * @param context The context object.
+ * @param chat_id The chat ID of the chatroom.
+ * @param name The name of the permission group.
+ * @param permissions A comma-separated list of permission keys, e.g.
+ *     "set_chat_name,set_chat_profile_image".
+ *     An empty string creates a group without any permission.
+ * @return The ID of the new permission group, 0 on errors.
+ */
+uint32_t        dc_create_permission_group     (dc_context_t* context, uint32_t chat_id, const char* name, const char* permissions);
+
+
+/**
+ * Change the name and the permissions of a permission group of a chatroom.
+ *
+ * Requires the `manage_permission_group` permission.
+ *
+ * @memberof dc_context_t
+ * @param context The context object.
+ * @param chat_id The chat ID of the chatroom.
+ * @param group_id The permission group ID.
+ * @param name The new name of the permission group.
+ * @param permissions A comma-separated list of permission keys,
+ *     see dc_create_permission_group().
+ * @return 1=success, 0=errors.
+ */
+int             dc_set_permission_group        (dc_context_t* context, uint32_t chat_id, uint32_t group_id, const char* name, const char* permissions);
+
+
+/**
+ * Delete a permission group of a chatroom.
+ *
+ * The built-in permission groups "Owner" and "Everyone" cannot be deleted.
+ * Requires the `manage_permission_group` permission.
+ *
+ * @memberof dc_context_t
+ * @param context The context object.
+ * @param chat_id The chat ID of the chatroom.
+ * @param group_id The permission group ID.
+ * @return 1=success, 0=errors.
+ */
+int             dc_delete_permission_group     (dc_context_t* context, uint32_t chat_id, uint32_t group_id);
+
+
+/**
+ * Get the members of a permission group of a chatroom.
+ *
+ * @memberof dc_context_t
+ * @param context The context object.
+ * @param chat_id The chat ID of the chatroom.
+ * @param group_id The permission group ID.
+ * @return An array of contact IDs;
+ *     must be freed using dc_array_unref() when no longer needed.
+ */
+dc_array_t*     dc_get_permission_group_members (dc_context_t* context, uint32_t chat_id, uint32_t group_id);
+
+
+/**
+ * Add a contact to a permission group of a chatroom.
+ *
+ * A contact may be a member of multiple permission groups
+ * and then has the permissions of all of them.
+ * Requires the `assign_permission_group` permission.
+ *
+ * @memberof dc_context_t
+ * @param context The context object.
+ * @param chat_id The chat ID of the chatroom.
+ * @param group_id The permission group ID.
+ * @param contact_id The contact ID to add.
+ *     To add yourself, pass DC_CONTACT_ID_SELF (1) here.
+ * @return 1=success, 0=errors.
+ */
+int             dc_assign_permission_group     (dc_context_t* context, uint32_t chat_id, uint32_t group_id, uint32_t contact_id);
+
+
+/**
+ * Remove a contact from a permission group of a chatroom.
+ *
+ * Requires the `assign_permission_group` permission.
+ *
+ * @memberof dc_context_t
+ * @param context The context object.
+ * @param chat_id The chat ID of the chatroom.
+ * @param group_id The permission group ID.
+ * @param contact_id The contact ID to remove.
+ * @return 1=success, 0=errors.
+ */
+int             dc_revoke_permission_group     (dc_context_t* context, uint32_t chat_id, uint32_t group_id, uint32_t contact_id);
+
+
+/**
+ * Get all permissions a contact has in a chatroom.
+ *
+ * All permissions are granted in chats which are not chatrooms.
+ *
+ * @memberof dc_context_t
+ * @param context The context object.
+ * @param chat_id The chat ID of the chatroom.
+ * @param contact_id The contact ID.
+ *     To check yourself, pass DC_CONTACT_ID_SELF (1) here.
+ * @return A comma-separated list of permission keys,
+ *     see dc_create_permission_group();
+ *     must be released using dc_str_unref() after usage.
+ */
+char*           dc_get_contact_permissions     (dc_context_t* context, uint32_t chat_id, uint32_t contact_id);
+
+
+/**
+ * Check if a contact has a permission in a chatroom.
+ *
+ * All permissions are granted in chats which are not chatrooms.
+ *
+ * @memberof dc_context_t
+ * @param context The context object.
+ * @param chat_id The chat ID of the chatroom.
+ * @param contact_id The contact ID.
+ *     To check yourself, pass DC_CONTACT_ID_SELF (1) here.
+ * @param permission A permission key, e.g. "set_chat_name".
+ * @return 1=contact has the permission, 0=contact does not have the
+ *     permission or the permission key is unknown.
+ */
+int             dc_has_permission              (dc_context_t* context, uint32_t chat_id, uint32_t contact_id, const char* permission);
+
+
+/**
  * Create a new broadcast list.
  *
  * Broadcast lists are similar to groups on the sending device,
@@ -3772,6 +3985,21 @@ int             dc_chat_is_self_talk         (const dc_chat_t* chat);
  * @return 1=chat is device talk, 0=chat is no device talk.
  */
 int             dc_chat_is_device_talk       (const dc_chat_t* chat);
+
+
+/**
+ * Check if a chat is a chatroom.
+ *
+ * A chatroom is a group chat with a permission group system,
+ * everything that can be done with group chats
+ * can be done with chatrooms as well.
+ * See dc_create_chatroom().
+ *
+ * @memberof dc_chat_t
+ * @param chat The chat object.
+ * @return 1=chat is a chatroom, 0=chat is no chatroom.
+ */
+int             dc_chat_is_chatroom          (const dc_chat_t* chat);
 
 
 /**

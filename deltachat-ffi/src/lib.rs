@@ -1681,6 +1681,296 @@ pub unsafe extern "C" fn dc_create_group_chat(
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn dc_create_chatroom(
+    context: *mut dc_context_t,
+    name: *const libc::c_char,
+) -> u32 {
+    if context.is_null() || name.is_null() {
+        eprintln!("ignoring careless call to dc_create_chatroom()");
+        return 0;
+    }
+    let ctx = unsafe { &*context };
+
+    block_on(chatroom::create_chatroom(ctx, &to_string_lossy(name)))
+        .context("Failed to create chatroom")
+        .log_err(ctx)
+        .map(|id| id.to_u32())
+        .unwrap_or(0)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dc_get_chatroom_creator(
+    context: *mut dc_context_t,
+    chat_id: u32,
+) -> u32 {
+    if context.is_null() {
+        eprintln!("ignoring careless call to dc_get_chatroom_creator()");
+        return 0;
+    }
+    let ctx = unsafe { &*context };
+
+    let chat_id = ChatId::new(chat_id);
+    let Ok(chat) = block_on(chat::Chat::load_from_db(ctx, chat_id))
+        .context("Failed to load chat")
+        .log_err(ctx)
+    else {
+        return 0;
+    };
+    block_on(chat.get_chatroom_creator(ctx))
+        .unwrap_or_log_default(ctx, "Failed to get chatroom creator")
+        .map(|id| id.to_u32())
+        .unwrap_or(0)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dc_get_permission_group_ids(
+    context: *mut dc_context_t,
+    chat_id: u32,
+) -> *mut dc_array::dc_array_t {
+    if context.is_null() {
+        eprintln!("ignoring careless call to dc_get_permission_group_ids()");
+        return ptr::null_mut();
+    }
+    let ctx = unsafe { &*context };
+
+    let chat_id = ChatId::new(chat_id);
+    let arr = dc_array_t::from(
+        block_on(chat_id.get_permission_groups(ctx))
+            .unwrap_or_log_default(ctx, "Failed to get permission groups")
+            .iter()
+            .map(|group| group.id)
+            .collect::<Vec<u32>>(),
+    );
+    Box::into_raw(Box::new(arr))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dc_get_permission_group_name(
+    context: *mut dc_context_t,
+    chat_id: u32,
+    group_id: u32,
+) -> *mut libc::c_char {
+    if context.is_null() {
+        eprintln!("ignoring careless call to dc_get_permission_group_name()");
+        return "".strdup();
+    }
+    let ctx = unsafe { &*context };
+
+    let chat_id = ChatId::new(chat_id);
+    block_on(chat_id.get_permission_groups(ctx))
+        .unwrap_or_log_default(ctx, "Failed to get permission groups")
+        .into_iter()
+        .find(|group| group.id == group_id)
+        .map(|group| group.name)
+        .unwrap_or_default()
+        .strdup()
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dc_get_permission_group_permissions(
+    context: *mut dc_context_t,
+    chat_id: u32,
+    group_id: u32,
+) -> *mut libc::c_char {
+    if context.is_null() {
+        eprintln!("ignoring careless call to dc_get_permission_group_permissions()");
+        return "".strdup();
+    }
+    let ctx = unsafe { &*context };
+
+    let chat_id = ChatId::new(chat_id);
+    block_on(chat_id.get_permission_groups(ctx))
+        .unwrap_or_log_default(ctx, "Failed to get permission groups")
+        .into_iter()
+        .find(|group| group.id == group_id)
+        .map(|group| chatroom::permissions_to_string(&group.permissions))
+        .unwrap_or_default()
+        .strdup()
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dc_create_permission_group(
+    context: *mut dc_context_t,
+    chat_id: u32,
+    name: *const libc::c_char,
+    permissions: *const libc::c_char,
+) -> u32 {
+    if context.is_null() || name.is_null() || permissions.is_null() {
+        eprintln!("ignoring careless call to dc_create_permission_group()");
+        return 0;
+    }
+    let ctx = unsafe { &*context };
+
+    let chat_id = ChatId::new(chat_id);
+    let permissions = to_string_lossy(permissions);
+    let Ok(permissions) = chatroom::parse_permissions(permissions.split(',')).log_err(ctx) else {
+        return 0;
+    };
+    block_on(chat_id.create_permission_group(ctx, &to_string_lossy(name), &permissions))
+        .context("Failed to create permission group")
+        .log_err(ctx)
+        .unwrap_or(0)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dc_set_permission_group(
+    context: *mut dc_context_t,
+    chat_id: u32,
+    group_id: u32,
+    name: *const libc::c_char,
+    permissions: *const libc::c_char,
+) -> libc::c_int {
+    if context.is_null() || name.is_null() || permissions.is_null() {
+        eprintln!("ignoring careless call to dc_set_permission_group()");
+        return 0;
+    }
+    let ctx = unsafe { &*context };
+
+    let chat_id = ChatId::new(chat_id);
+    let permissions = to_string_lossy(permissions);
+    let Ok(permissions) = chatroom::parse_permissions(permissions.split(',')).log_err(ctx) else {
+        return 0;
+    };
+    block_on(chat_id.set_permission_group(ctx, group_id, &to_string_lossy(name), &permissions))
+        .context("Failed to set permission group")
+        .log_err(ctx)
+        .map(|_| 1)
+        .unwrap_or(0)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dc_delete_permission_group(
+    context: *mut dc_context_t,
+    chat_id: u32,
+    group_id: u32,
+) -> libc::c_int {
+    if context.is_null() {
+        eprintln!("ignoring careless call to dc_delete_permission_group()");
+        return 0;
+    }
+    let ctx = unsafe { &*context };
+
+    let chat_id = ChatId::new(chat_id);
+    block_on(chat_id.delete_permission_group(ctx, group_id))
+        .context("Failed to delete permission group")
+        .log_err(ctx)
+        .map(|_| 1)
+        .unwrap_or(0)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dc_get_permission_group_members(
+    context: *mut dc_context_t,
+    chat_id: u32,
+    group_id: u32,
+) -> *mut dc_array::dc_array_t {
+    if context.is_null() {
+        eprintln!("ignoring careless call to dc_get_permission_group_members()");
+        return ptr::null_mut();
+    }
+    let ctx = unsafe { &*context };
+
+    let chat_id = ChatId::new(chat_id);
+    let arr = dc_array_t::from(
+        block_on(chat_id.get_permission_group_members(ctx, group_id))
+            .unwrap_or_log_default(ctx, "Failed to get permission group members")
+            .iter()
+            .map(|id| id.to_u32())
+            .collect::<Vec<u32>>(),
+    );
+    Box::into_raw(Box::new(arr))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dc_assign_permission_group(
+    context: *mut dc_context_t,
+    chat_id: u32,
+    group_id: u32,
+    contact_id: u32,
+) -> libc::c_int {
+    if context.is_null() {
+        eprintln!("ignoring careless call to dc_assign_permission_group()");
+        return 0;
+    }
+    let ctx = unsafe { &*context };
+
+    let chat_id = ChatId::new(chat_id);
+    block_on(chat_id.assign_permission_group(ctx, group_id, ContactId::new(contact_id)))
+        .context("Failed to assign permission group")
+        .log_err(ctx)
+        .map(|_| 1)
+        .unwrap_or(0)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dc_revoke_permission_group(
+    context: *mut dc_context_t,
+    chat_id: u32,
+    group_id: u32,
+    contact_id: u32,
+) -> libc::c_int {
+    if context.is_null() {
+        eprintln!("ignoring careless call to dc_revoke_permission_group()");
+        return 0;
+    }
+    let ctx = unsafe { &*context };
+
+    let chat_id = ChatId::new(chat_id);
+    block_on(chat_id.revoke_permission_group(ctx, group_id, ContactId::new(contact_id)))
+        .context("Failed to revoke permission group")
+        .log_err(ctx)
+        .map(|_| 1)
+        .unwrap_or(0)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dc_get_contact_permissions(
+    context: *mut dc_context_t,
+    chat_id: u32,
+    contact_id: u32,
+) -> *mut libc::c_char {
+    if context.is_null() {
+        eprintln!("ignoring careless call to dc_get_contact_permissions()");
+        return "".strdup();
+    }
+    let ctx = unsafe { &*context };
+
+    let chat_id = ChatId::new(chat_id);
+    let contact_id = ContactId::new(contact_id);
+    let permissions = block_on(chat_id.get_contact_permissions(ctx, contact_id))
+        .unwrap_or_log_default(ctx, "Failed to get contact permissions");
+    chatroom::permissions_to_string(&permissions).strdup()
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dc_has_permission(
+    context: *mut dc_context_t,
+    chat_id: u32,
+    contact_id: u32,
+    permission: *const libc::c_char,
+) -> libc::c_int {
+    if context.is_null() || permission.is_null() {
+        eprintln!("ignoring careless call to dc_has_permission()");
+        return 0;
+    }
+    let ctx = unsafe { &*context };
+
+    let chat_id = ChatId::new(chat_id);
+    let permission = to_string_lossy(permission);
+    let Ok(permission) = chatroom::ChatPermission::new(&permission)
+        .context("Unknown chatroom permission")
+        .log_err(ctx)
+    else {
+        return 0;
+    };
+    block_on(chat_id.has_permission(ctx, ContactId::new(contact_id), permission))
+        .context("Failed to check permission")
+        .log_err(ctx)
+        .map(|granted| granted as libc::c_int)
+        .unwrap_or(0)
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn dc_create_broadcast_list(context: *mut dc_context_t) -> u32 {
     unsafe {
         if context.is_null() {
@@ -3024,6 +3314,16 @@ pub unsafe extern "C" fn dc_chat_is_device_talk(chat: *mut dc_chat_t) -> libc::c
     }
     let ffi_chat = unsafe { &*chat };
     ffi_chat.chat.is_device_talk() as libc::c_int
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dc_chat_is_chatroom(chat: *mut dc_chat_t) -> libc::c_int {
+    if chat.is_null() {
+        eprintln!("ignoring careless call to dc_chat_is_chatroom()");
+        return 0;
+    }
+    let ffi_chat = unsafe { &*chat };
+    ffi_chat.chat.is_chatroom() as libc::c_int
 }
 
 #[unsafe(no_mangle)]

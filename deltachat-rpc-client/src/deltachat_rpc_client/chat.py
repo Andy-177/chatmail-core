@@ -277,6 +277,123 @@ class Chat:
         """Remove profile image of this chat."""
         self._rpc.set_chat_profile_image(self.account.id, self.id, None)
 
+    def is_chatroom(self) -> bool:
+        """Return True if this chat is a chatroom, i.e. a group with permission groups."""
+        return self._rpc.get_basic_chat_info(self.account.id, self.id)["isChatroom"]
+
+    def _contact_id(self, cnt: Union[int, str, Contact, "Account"]) -> int:
+        from .account import Account
+
+        if isinstance(cnt, (str, Account)):
+            return self.account.create_contact(cnt).id
+        if isinstance(cnt, int):
+            return cnt
+        return cnt.id
+
+    def get_chatroom_creator(self) -> Optional[Contact]:
+        """Return the contact which created this chatroom.
+
+        Returns None if the chat is not a chatroom
+        or if there is no contact which created it.
+        """
+        creator_id = self._rpc.get_chatroom_creator(self.account.id, self.id)
+        if creator_id is None:
+            return None
+        return Contact(self.account, creator_id)
+
+    def get_permission_groups(self) -> list[AttrDict]:
+        """Return the permission groups of this chatroom.
+
+        The built-in permission groups "Owner" and "Everyone" are contained
+        in the result and cannot be deleted.
+        Chats which are not chatrooms have no permission groups.
+        """
+        groups = self._rpc.get_permission_groups(self.account.id, self.id)
+        return [AttrDict(group) for group in groups]
+
+    def create_permission_group(self, name: str, permissions: Optional[list[str]] = None) -> int:
+        """Create a permission group in this chatroom and return its ID.
+
+        Requires the `manage_permission_group` permission.
+
+        :param name: Name of the permission group.
+        :param permissions: Permission keys, e.g. `["set_chat_name"]`.
+        """
+        return self._rpc.create_permission_group(self.account.id, self.id, name, permissions or [])
+
+    def set_permission_group(self, group_id: int, name: str, permissions: Optional[list[str]] = None) -> None:
+        """Change name and permissions of a permission group of this chatroom.
+
+        Requires the `manage_permission_group` permission.
+
+        :param group_id: ID of the permission group.
+        :param name: New name of the permission group.
+        :param permissions: Permission keys, e.g. `["set_chat_name"]`.
+        """
+        self._rpc.set_permission_group(self.account.id, self.id, group_id, name, permissions or [])
+
+    def delete_permission_group(self, group_id: int) -> None:
+        """Delete a permission group of this chatroom.
+
+        The built-in permission groups "Owner" and "Everyone" cannot be deleted.
+        Requires the `manage_permission_group` permission.
+
+        :param group_id: ID of the permission group.
+        """
+        self._rpc.delete_permission_group(self.account.id, self.id, group_id)
+
+    def get_permission_group_members(self, group_id: int) -> list[Contact]:
+        """Return the members of a permission group of this chatroom.
+
+        :param group_id: ID of the permission group.
+        """
+        members = self._rpc.get_permission_group_members(self.account.id, self.id, group_id)
+        return [Contact(self.account, member_id) for member_id in members]
+
+    def assign_permission_group(self, group_id: int, cnt: Union[int, str, Contact, "Account"]) -> None:
+        """Add a contact to a permission group of this chatroom.
+
+        A contact may be a member of multiple permission groups
+        and then has the permissions of all of them.
+        Requires the `assign_permission_group` permission.
+
+        :param group_id: ID of the permission group.
+        :param cnt: Contact to add.
+        """
+        contact_id = self._contact_id(cnt)
+        self._rpc.assign_permission_group(self.account.id, self.id, group_id, contact_id)
+
+    def revoke_permission_group(self, group_id: int, cnt: Union[int, str, Contact, "Account"]) -> None:
+        """Remove a contact from a permission group of this chatroom.
+
+        Requires the `assign_permission_group` permission.
+
+        :param group_id: ID of the permission group.
+        :param cnt: Contact to remove.
+        """
+        contact_id = self._contact_id(cnt)
+        self._rpc.revoke_permission_group(self.account.id, self.id, group_id, contact_id)
+
+    def get_permissions(self, cnt: Union[int, str, Contact, "Account"]) -> list[str]:
+        """Return all permission keys the contact has in this chatroom.
+
+        All permissions are granted in chats which are not chatrooms.
+
+        :param cnt: Contact to check.
+        """
+        return self._rpc.get_contact_permissions(self.account.id, self.id, self._contact_id(cnt))
+
+    def has_permission(self, cnt: Union[int, str, Contact, "Account"], permission: str) -> bool:
+        """Return True if the contact has the given permission in this chatroom.
+
+        All permissions are granted in chats which are not chatrooms.
+
+        :param cnt: Contact to check.
+        :param permission: Permission key, e.g. `"set_chat_name"`.
+        """
+        contact_id = self._contact_id(cnt)
+        return self._rpc.has_chat_permission(self.account.id, self.id, contact_id, permission)
+
     def send_locations(self, seconds) -> None:
         """Enable location streaming in the chat for the given number of seconds.
 

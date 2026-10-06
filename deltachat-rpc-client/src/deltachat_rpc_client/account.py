@@ -351,6 +351,24 @@ class Account:
         """
         return Chat(self, self._rpc.create_group_chat(self.id, name, False))
 
+    def create_chatroom(self, name: str) -> Chat:
+        """Create a new chatroom.
+
+        A chatroom is a group chat with a permission group system,
+        everything that can be done with group chats
+        can be done with chatrooms as well.
+
+        After creation the chatroom has the built-in permission groups
+        "Owner" and "Everyone" and is in _unpromoted_ state,
+        see `create_group()` for details about promoted state.
+
+        The creator of the chatroom is a member of "Owner" and can never lose
+        the `manage_permission_group` and `assign_permission_group` permissions.
+
+        Returns the created chat.
+        """
+        return Chat(self, self._rpc.create_chatroom(self.id, name))
+
     def create_broadcast(self, name: str) -> Chat:
         """Create a new, outgoing **broadcast channel**
         (called "Channel" in the UI).
